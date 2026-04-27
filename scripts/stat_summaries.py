@@ -336,7 +336,6 @@ cell_type = "4P"
 hue = "broad_type_lda_prediction"
 x = "post_p_spine_synapse"
 y = "post_p_spine_site_is_multi"
-# y = "post_mean_spine_inputs"
 size = "post_total_synapses"
 sns.scatterplot(
     data=cell_info.query("post_total_synapses > 500 and cell_type == @cell_type"),
@@ -362,9 +361,6 @@ sns.scatterplot(
     data=data,
     x="post_total_synapses",
     y="post_p_spine_site_is_multi",
-    # size=size,
-    # hue=hue,
-    # sizes=(2, 30),
     s=5,
     alpha=0.5,
     linewidth=0,
@@ -389,7 +385,6 @@ name_map = {
 }
 legend = False
 xs = ["post_p_spine_site_is_multi", "post_p_spine_synapse"]
-# x = 'post_spine_shaft_ratio'
 for x in xs:
     fig, ax = plt.subplots(1, 1, figsize=(8.29, 7.17), dpi=300)
     sns.scatterplot(
@@ -459,7 +454,6 @@ for x in xs:
 # %% PLOT OF WHERE COLUMN CELLS ARE
 cell_info["curated_broad_type"] = cell_info["broad_type"].astype(str)
 CELL_TYPE_PALETTE["unlabeled"] = "#5d5d5d"
-# where not in column, replace with unknown
 cell_info.loc[cell_info.query("~in_column").index, "curated_broad_type"] = "unlabeled"
 
 
@@ -532,7 +526,6 @@ group_category_proportions["total_count"] = (
 
 # %% BARPLOTS SHOWING TYPE TO TYPE PROPORTIONS
 
-# plot_categories = CELL_TYPE_CATEGORIES[1:-1]  # dropping thalamic and unk here for now
 drop_categories = ["TH", "Unk"]
 plot_categories = [c for c in CELL_TYPE_CATEGORIES if c not in drop_categories]
 n_groups = len(plot_categories)
@@ -562,9 +555,6 @@ for i, pre_type in enumerate(plot_categories):
         if data["total_count"].values[0] < 50:
             ax.axis("off")
             continue
-        # if len(data) == 0:
-        #     ax.axis("off")
-        #     continue
         sns.barplot(
             data=data,
             x="tag",
@@ -574,7 +564,6 @@ for i, pre_type in enumerate(plot_categories):
             palette=COMPARTMENT_PALETTE_MUTED_HEX,
             order=["spine", "shaft", "soma"],
             hue_order=["spine", "shaft", "soma"],
-            # width=1,
         )
         ax.set(ylabel="")
 for i, pre_type in enumerate(plot_categories):
@@ -622,7 +611,6 @@ def draw_bracket(
                 ha="center",
                 va="bottom",
                 color=color,
-                # transform=ax.get_xaxis_transform(),
                 **text_kws,
             )
         if normalize_limits:
@@ -639,7 +627,6 @@ def draw_bracket(
                 color=color,
                 rotation=90,
                 rotation_mode="anchor",
-                # transform=ax.get_yaxis_transform(),
                 **text_kws,
             )
         if normalize_limits:
@@ -806,7 +793,6 @@ for i, pre_type in enumerate(plot_categories):
         ax = axs[i, j]
         data = plot_props.loc[(pre_type, post_type)].reset_index()
         if data["total_count"].values[0] < 10:
-            # ax.axis("off")
             ax.set_xticks([])
             ax.set_yticks([])
             ax.spines[["top", "right", "left", "bottom"]].set_visible(False)
@@ -1134,7 +1120,6 @@ ax.text(
 ax.set(
     ylabel="Normalized\ncell density",
     yticks=[],
-    # xlabel="Number of synapses on spines",
     xlabel="Number of synapses on spines",
 )
 ax.spines[["top", "right", "left"]].set_visible(False)
@@ -1170,7 +1155,6 @@ save_variables(
 
 # %% SUMMARY PLOTS OF CELLS BY CELL TYPE SHOWING P SPINE
 
-# TODO didn't I replace all this in the aggregation polars code?
 props = []
 for broad_type in ["excitatory", "inhibitory"]:
     column_info_select = (
@@ -1197,9 +1181,7 @@ for broad_type in ["excitatory", "inhibitory"]:
     column_props_select[f"pre_p_dendrite_spine_synapse_to_{broad_type}"] = (
         column_info_select["spine"] / column_info_select["total_dendrite"]
     ).fillna(0)
-    # column_props_select["pre_total_synapse_to_" + broad_type] = column_info_select[
-    #     "total"
-    # ]
+
     column_props_select = column_props_select.join(
         column_info_select.rename(columns=lambda x: f"pre_{x}_synapse_to_{broad_type}")
     )
@@ -1353,7 +1335,6 @@ def sorted_stripplot_with_means(
     fig, axs = plt.subplots(
         1,
         2,
-        # figsize=(8, 8),
         figsize=(8.29, 7.17),
         dpi=300,
         layout="constrained",
@@ -1373,7 +1354,6 @@ def sorted_stripplot_with_means(
         size_norm=size_norm,
         legend_sizes=legend_sizes,
     )
-    # means = data.groupby("cell_type")[[mean_x, y]].mean().reset_index()
     means = data.groupby("cell_type", observed=True).agg(
         x=(
             x,
@@ -1453,9 +1433,7 @@ def label_ei_border(axs, start=0, side="pre"):
     draw_bracket(ax, -0.5 + start, ei_border, axis="y", label="Excitatory")
     draw_bracket(ax, ei_border, 11.5, axis="y", label="Inhibitory")
     ax.set(ylim=axs[1].get_ylim())
-    # ax.set_ylabel(
-    #     f"{side.capitalize()}synaptic cell type", labelpad=35, fontsize="medium"
-    # )
+
     if side == "pre":
         ax.set_ylabel("Output cell", labelpad=35, fontsize="large")
     else:
@@ -1601,7 +1579,6 @@ fig, axs, mean_data = sorted_stripplot_with_means(
     bbox_to_anchor=(0.98, 0.985),
     xlim=(0, 0.6),
     xlabel="Proportion of spines with multiple inputs",
-    # title="All inputs to spines",
 )
 
 save_matplotlib_figure(fig, "cell_type_input_proportion_multi_spine", figure_out_path)
@@ -1695,7 +1672,6 @@ data["post_non_spine_synapses"] = (
     data["post_shaft_synapses"] + data["post_soma_synapses"]
 )
 data["is_manual"] = data["cell_type_source"] == "allen_v1_column_types_slanted_ref"
-# data["is_IT"] = data["cell_type"].str.contains("IT")
 x = "post_spine_synapses"
 y = "post_shaft_synapses"
 sns.scatterplot(
@@ -1705,9 +1681,6 @@ sns.scatterplot(
     ax=ax,
     hue="cell_type",
     palette=CELL_TYPE_PALETTE,
-    # style="is_IT",
-    # size="post_total_synapses",
-    # sizes=(5, 50),
     s=5,
     legend=False,
 )
@@ -1752,19 +1725,6 @@ fig, axs = plt.subplots(2, 7, figsize=(20, 20 / 7 * 2), sharex=True, sharey=True
 for i, (name, group) in enumerate(data.groupby("cell_type", observed=True)):
     X = group[[x, y]].dropna().to_numpy()
     X = np.log(X)
-    # n_components = 1
-
-    # gmm = GaussianMixture(
-    #     n_components=n_components,
-    #     covariance_type="full",
-    #     reg_covar=1e-6,
-    #     init_params="k-means++",
-    #     n_init=50,
-    #     max_iter=200,
-    #     # tol=1e-4,
-    #     # random_state=42,
-    # )
-    # gmm.fit(X)
 
     model = EllipticEnvelope(contamination=0.01)
     model.fit(X)
@@ -1782,7 +1742,6 @@ for i, (name, group) in enumerate(data.groupby("cell_type", observed=True)):
         ax=ax,
         hue=posteriors[:],
         palette="RdBu_r",
-        # hue_norm=(0, 1),
         legend=False,
         s=1,
         linewidth=0,
@@ -1855,7 +1814,6 @@ for i, pre_broad_type in enumerate(["thalamic", "excitatory", "inhibitory"]):
             transform=ax.transAxes,
         )
 
-    # sns.move_legend(ax, "upper left", title="Target")
     text = rf"{broad_type_remapper(pre_broad_type)}"
     if i == 0:
         text = "Outputs from: " + text
@@ -1931,7 +1889,6 @@ for i, pre_broad_type in enumerate(["thalamic", "excitatory", "inhibitory"]):
             transform=ax.transAxes,
         )
 
-    # sns.move_legend(ax, "upper left", title="Target")
     text = rf"{broad_type_remapper(pre_broad_type)}"
     if i == 0:
         text = "Outputs from: " + text
@@ -1991,22 +1948,10 @@ for i, (pre_cell_type, data) in enumerate(
             common_norm=False,
             legend=False,
         )
-        # if i == 0:
-        #     sns.move_legend(
-        #         ax,
-        #         "upper left",
-        #         title="",
-        #         ncol=2,
-        #         bbox_to_anchor=(0.0, 0.7),
-        #         handletextpad=0,
-        #     )
-        # else:
-        #     ax.get_legend().remove()
+
         ax.set(
-            # title=rf"{pre_cell_type} $\rightarrow$ excitatory synapses",
             xlabel="Synapse cleft size (voxels)",
             ylabel="",
-            # ylabel="Normalized density",
             yticks=[],
         )
         if i == 0:
@@ -2086,7 +2031,6 @@ for i, post_broad_type in enumerate(["excitatory", "inhibitory"]):
             transform=ax.transAxes,
         )
 
-    # sns.move_legend(ax, "upper left", title="Target")
     text = rf"{post_broad_type.capitalize()}"
     if i == 0:
         text = "Inputs to: " + text
@@ -2135,22 +2079,10 @@ for i, (post_cell_type, data) in enumerate(
             common_norm=False,
             legend=False,
         )
-        # if i == 0:
-        #     sns.move_legend(
-        #         ax,
-        #         "upper left",
-        #         title="",
-        #         ncol=2,
-        #         bbox_to_anchor=(0.0, 0.7),
-        #         handletextpad=0,
-        #     )
-        # else:
-        #     ax.get_legend().remove()
+
         ax.set(
-            # title=rf"{pre_cell_type} $\rightarrow$ excitatory synapses",
             xlabel="Synapse cleft size (voxels)",
             ylabel="",
-            # ylabel="Normalized density",
             yticks=[],
         )
         if i == 0:
@@ -2406,7 +2338,6 @@ pairing_props["name"] = (
 )
 
 fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-# sns.barplot(pairing_props.reset_index(), x="proportion", y="name", ax=ax)
 
 shift = 0.2
 right = -0.05
@@ -2445,7 +2376,6 @@ for i, (_, row) in enumerate(pairing_props.iterrows()):
 
 ax.set(
     yticks=[],
-    # yticklabels=pairing_props["name"],
     xlabel="Proportion of \ndouble-input spines",
 )
 ax.set_ylabel("Input synapse pairing", labelpad=115)
@@ -2502,7 +2432,6 @@ sns.histplot(
     alpha=0.5,
     bins=bins,
     label="Null",
-    # linewidth=1,
 )
 ax.set(xlabel="Proportion of spines with multiple inputs", xlim=(0.05, 0.3))
 ax.set(xscale="log", ylabel="Cell count")
@@ -2546,11 +2475,8 @@ def histplot_with_lognorm_fit(x, ax=None, bins=None, label=None, color=None):
         stat="density",
         bins=bins,
         ax=ax,
-        # color="black",
         color=color,
         label=label,
-        # element="step",
-        # fill=False,
     )
 
     gaussian_fit = lognorm.fit(x)
@@ -2558,15 +2484,12 @@ def histplot_with_lognorm_fit(x, ax=None, bins=None, label=None, color=None):
     y_fit = lognorm.pdf(x_fit, *gaussian_fit)
     ax.plot(x_fit, y_fit, color="dimgrey", linestyle="--", label="Lognormal")
     ax.set_xscale("log")
-    # ax.legend(loc='lower left')
     ax.text(0.0, 0.8, "Lognormal\nfit", transform=ax.transAxes, color="dimgrey")
     ax.spines["left"].set_visible(False)
     ax.set(
-        # ylabel="Density",
         yticks=[],
         xticks=[0.05, 0.1, 0.2, 0.3],
     )
-    # ax.xaxis.set_major_formatter(plt.ScalarFormatter())
 
     return fig, ax, gaussian_fit
 
@@ -2599,18 +2522,6 @@ fig, ax, fit = histplot_with_lognorm_fit(
     color=CELL_TYPE_PALETTE["excitatory"],
 )
 ax.set(ylabel="Density\n(cells)")
-
-# query_cell_info = (
-#     cell_info.query(
-#         "broad_type == @cell_type and post_total_synapses > 1000 and broad_type_lda_prediction == @cell_type and in_column"
-#     )
-#     .sort_values(x, ascending=False)
-#     .copy()
-# )
-
-# x_vals = query_cell_info[x].dropna().values
-# fig, ax, fit = histplot_with_lognorm_fit(x_vals, color="red", ax=axs[0])
-
 
 y = "post_p_spine_synapse"
 ax = axs[1]
@@ -2666,7 +2577,6 @@ sns.histplot(
     .copy(),
     x=x,
     stat="density",
-    # bins=bins,
     log_scale=True,
     color="black",
 )
@@ -2690,8 +2600,6 @@ ax.text(0.1, 0.8, f"{cell_type}", transform=ax.transAxes)
 # %% LOGNORMAL FIT OF MULTI SPINE PROPORTION BY EXCITATORY CELL TYPE
 cell_types = CELL_TYPE_CATEGORIES[1:8]
 cell_types
-
-# major_ticks = [0.02, 0.2]
 
 fig, axs = plt.subplots(len(cell_types), 1, figsize=(8, 12), layout="constrained")
 fig2, axs2 = plt.subplots(1, 1, figsize=(8, 8))
@@ -2721,10 +2629,8 @@ for i, cell_type in enumerate(cell_types):
     ax.plot(x_fit, y_fit, color="red", linestyle="--", label="Lognormal fit")
     ax.set_xscale("log")
     ax.spines["left"].set_visible(False)
-    # ax.set_title()
     ax.text(0, 0.7, f"{cell_type}", transform=ax.transAxes)
     ax.set(xlim=(0.01, 0.2), yticks=[], xticks=[], xticklabels=[], xlabel="", ylabel="")
-    # ax.set_xticklabels([])
     if i != len(cell_types) - 1:
         ax.xaxis.set_major_locator(plt.FixedLocator(ticks))
         ax.xaxis.set_major_formatter(NullFormatter())
@@ -2752,119 +2658,6 @@ save_matplotlib_figure(
     fig, f"excitatory_{x}_distribution_by_cell_type", figure_out_path
 )
 
-# %% CELL TYPE FOCUS COMPARISON TO MC INPUT COUNTS
-# cell_type = "23P"
-
-# x = "post_p_spine_site_is_multi"
-# query_cell_info = (
-#     cell_info.query(
-#         "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
-#     )
-#     .sort_values(x, ascending=False)
-#     .copy()
-# )
-
-# query_synapses = column_column_synapses.query("post_cell_type == @cell_type")
-
-# pre_type_counts = (
-#     query_synapses.groupby(["post_pt_root_id", "pre_cell_type"]).size().unstack()
-# )
-# query_cell_info["bc_mc_ratio"] = pre_type_counts["BC"] / pre_type_counts["MC"]
-# query_cell_info["mc_count"] = pre_type_counts["MC"]
-# query_cell_info["bc_count"] = pre_type_counts["BC"]
-
-# query_cell_info["mc_total_prop"] = pre_type_counts["MC"] / pre_type_counts.sum(axis=1)
-# query_cell_info["bc_total_prop"] = pre_type_counts["BC"] / pre_type_counts.sum(axis=1)
-
-# fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-
-# sns.scatterplot(
-#     data=query_cell_info,
-#     x="mc_count",
-#     y="post_p_spine_site_is_multi",
-#     hue="mtype",
-#     # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
-#     hue_order=["L4a", "L4b", "L4c"],
-#     legend=True,
-# )
-# # ax.set_xscale("log")
-# ax.set(
-#     xlabel="MC input count",
-#     ylabel="Proportion spines with multiple inputs",
-#     title="4P cells in column",
-# )
-# ax.set_xscale("log")
-# ax.set_yscale("log")
-
-# %%
-# cell_type = "5P-IT"
-# query_cell_info = cell_info.query(
-#     "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
-# )
-
-# skel_info = (
-#     pd.read_csv("neuron_skel_info.csv")
-#     .set_index("root_id")
-#     .drop(columns=["broad_type", "cell_type"])
-# )
-
-# y = "length_max_dist_to_tip_below_40um"
-# x = "post_p_spine_site_is_multi"
-# query_cell_info = (
-#     query_cell_info.drop(columns=skel_info.columns, errors="ignore")
-#     .join(skel_info, how="left")
-#     .dropna(subset=[x, y])
-# )
-
-# fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-
-# sns.scatterplot(
-#     data=query_cell_info,
-#     x=x,
-#     y=y,
-#     # hue="mtype",
-#     # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
-#     # hue_order=["L4a", "L4b", "L4c"],
-#     legend=True,
-#     s=10,
-# )
-# ax.set(xscale="log", yscale="log")
-
-# xs = np.log(query_cell_info[x].values)
-# ys = np.log(query_cell_info[y].values)
-# pearsonr(xs, ys)
-
-# %% MULTI SPINE RATE CORRELATION WITH TIP LENGTH DISTRIBUTION
-
-# sns.histplot(data=skel_info, x=y, log_scale=True, bins=40)
-
-# %% TIP LENGTH DISTRIBUTION
-
-
-# %% INDEX WRITING (FOR INTERACTION WITH TIP STATS FILE)
-# use numpy savetxt to write to a csv
-# np.savetxt(
-#     "index.csv", query_cell_info.index.to_numpy().astype(int), delimiter=",", fmt="%d"
-# )
-
-
-# %% P MULTI DISTRIBUTION BY MTYPE WITHIN CELL TYPE
-# fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-
-# sns.histplot(
-#     data=query_cell_info,
-#     x="post_p_spine_site_is_multi",
-#     hue="mtype",
-#     # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
-#     hue_order=["L4a", "L4b", "L4c"],
-#     legend=True,
-#     log_scale=True,
-#     element="step",
-#     common_norm=False,
-#     stat="density",
-# )
-# ax.set(xlabel="Proportion of spines\nwith multiple inputs")
-
 # %% GET SOME EXAMPLE NEURONS WITH MANY MULTIS
 cell_type = "23P"
 query_cell_info = cell_info.query(
@@ -2881,7 +2674,6 @@ data = cell_info.query("cell_type == @cell_type and in_column")
 data = cell_info.query(
     "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
 )
-# data = data.query("in_column")
 pad = 0.001
 quantiles = np.quantile(data[x], [pad, 1])
 print(len(data))
@@ -2890,13 +2682,11 @@ fig, ax = plt.subplots(1, 1, figsize=(6, 4))
 
 sns.histplot(
     data=data,
-    # hue="in_column",
     x=x,
     log_scale=True,
     common_norm=False,
     stat="proportion",
     bins=40,
-    # element='poly',
     kde=True,
 )
 ax.set(xlim=quantiles)
@@ -2916,48 +2706,10 @@ sns.histplot(
     log_scale=True,
     common_norm=False,
     stat="proportion",
-    # bins=30,
-    # element="step",
 )
-# %% OUTPUT SPINE RATES
-# cell_types = ["MC", "BC"]
-
-# data = cell_info.query("cell_type.isin(@cell_types) and in_column")
-
-# x = "pre_p_spine_synapse"
-
-# fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-
-# sns.histplot(
-#     data=data,
-#     x=x,
-#     log_scale=True,
-#     common_norm=False,
-#     stat="proportion",
-#     # bins=30,
-#     # element="step",
-# )
-# %%
-# cell_types = ["MC"]
-# data = cell_info.query("cell_type.isin(@cell_types) and in_column")
-
-# fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-
-# sns.scatterplot(
-#     data=data,
-#     x=x,
-#     y="pt_position_um_y",
-#     # log_scale=True,
-#     # common_norm=False,
-#     # stat="proportion",
-#     # bins=30,
-#     # element="step",
-# )
-# ax.set_xscale("log")
 
 
 # %% CELL P MULTI CORRELATION WITH OTHER FACTORS
-import numpy as np
 
 x = "post_p_spine_synapse_is_multi"
 y = "post_p_spine_synapse"
@@ -3047,37 +2799,6 @@ for j, cell_type in enumerate(cell_types):
 save_matplotlib_figure(fig, "p_multi_correlations", figure_out_path)
 
 
-# %% CELL P MULTI EFFECT BY VISUAL AREA
-
-# from scipy.stats import ks_2samp
-
-# hues = ["visual_area"]
-# for hue in hues:
-#     fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-#     sns.histplot(
-#         data=data,
-#         x=x,
-#         hue=hue,
-#         hue_order=["V1", "RL", "AL"],
-#         stat="density",
-#         common_norm=False,
-#         log_scale=True,
-#         bins=40,
-#         element="step",
-#         fill=False,
-#     )
-
-#     for i, (group1, data1) in enumerate(data.groupby(hue)):
-#         x1 = data1[x].values
-#         for j, (group2, data2) in enumerate(data.groupby(hue)):
-#             if j <= i:
-#                 continue
-#             x2 = data2[x].values
-
-#             result = ks_2samp(x1, x2)
-#             print(group1, group2, result.statistic, result.pvalue)
-
-
 # %% COMPUTE DELTA DEPTH (NEED TO REFACTOR)
 
 # TODO refactor into the table creation
@@ -3089,14 +2810,6 @@ all_post_synapses["post_delta_depth"] = (
 )
 # %% EXCITATORY P MULTI HISTOGRAMS BY DEPTH AND DISTANCES
 
-# def filter_and_bin(data, y):
-#     percentiles = data[y].quantile([0.01, 0.99])
-#     data = data.query(f"{y} >= @percentiles[0.01] and {y} <= @percentiles[0.99]").copy()
-#     bins = np.linspace(percentiles[0.01], percentiles[0.99], 25)
-#     data[f"{y}_bin"] = pd.cut(data[y], bins=bins)
-#     data[f"{y}_bin_mid"] = data[f"{y}_bin"].apply(lambda x: x.mid).astype(float)
-#     return data, bins
-
 
 def filter_and_bin(data, y, use_quantiles=True, trim_quantiles=(0.01, 0.99), n_bins=25):
     if trim_quantiles is None:
@@ -3105,7 +2818,6 @@ def filter_and_bin(data, y, use_quantiles=True, trim_quantiles=(0.01, 0.99), n_b
     data = data.query(
         f"{y} >= @percentiles[{trim_quantiles[0]}] and {y} <= @percentiles[{trim_quantiles[1]}]"
     ).copy()
-    # bins =
     if use_quantiles:
         data[f"{y}_bin"], bins = pd.qcut(data[y], q=n_bins, retbins=True)
     else:
@@ -3115,17 +2827,6 @@ def filter_and_bin(data, y, use_quantiles=True, trim_quantiles=(0.01, 0.99), n_b
         data[f"{y}_bin"] = pd.cut(data[y], bins=bins)
     data[f"{y}_bin_mid"] = data[f"{y}_bin"].apply(lambda x: x.mid).astype(float)
     return data, bins
-
-
-# def get_ratios(data, bin_col):
-#     counts = (
-#         data.query("spine_group_id.notna()")
-#         .groupby([f"{bin_col}_bin", "tag_detailed"], observed=True)["spine_group_id"]
-#         .nunique()
-#         .unstack()
-#         .fillna(0)
-#     )
-#     return counts["multi_spine"] / counts.sum(axis=1)
 
 
 def histplot(data, y, bins, ax):
@@ -3139,8 +2840,6 @@ def histplot(data, y, bins, ax):
         fill=True,
         hue_order=["single_spine", "multi_spine"],
         element="poly",
-        # linewidth=0,
-        # kde=True,
         kde=False,
         common_norm=False,
         palette=COMPARTMENT_PALETTE_MUTED_HEX,
@@ -3170,11 +2869,6 @@ base_data = (
     .query("tag == 'spine'")
     .copy()
 )
-# base_data = base_data.join(
-#     skeleton_extras.select("synapse_id", "max_dist_to_tip")
-#     .to_pandas()
-#     .set_index("synapse_id")
-# )
 
 
 base_data["post_max_dist_to_tip_um"] = base_data["max_dist_to_tip"] / 1000.0
@@ -3267,28 +2961,9 @@ save_matplotlib_figure(
 )
 
 
-# base_data = (
-#     all_post_synapses.query('post_broad_type == "excitatory"')
-#     .query("tag == 'spine'")
-#     .copy()
-# )
-# base_data["post_euc_distance_to_nuc_um"] = (
-#     base_data["post_euc_distance_to_nuc"] / 1000.0
-# )
-# base_data.query("post_euc_distance_to_nuc_um < 10")[["post_pt_root_id", "tag_detailed"]]
-
-# base_data['post_delta_depth']
-
-# skeleton_extras.filter(pl.col("compartment").is_in(["dendrite"])).select(
-#     pl.col("segment_id").is_null().mean()
-# )
-
-
 groups = ["23P", "4P", "5P-IT", "5P-ET", "6P-IT", "6P-CT"]
 base_data = base_data.query("post_cell_type.isin(@groups)")
-# base_data["is_multi"] = base_data["spine_n_pre_pt_root_ids"] > 1
 n_groups = len(groups)
-# n_groups = base_data["post_cell_type"].nunique()
 
 ys = [
     "transformed_um_y",
@@ -3318,7 +2993,6 @@ for y in ys:
 
     ax = axs[0]
     data, bins = filter_and_bin(base_data, y)
-    # histplot(data, y, bins, ax)
 
     lineplot(data, y, ax)
     ax.set_title("All excitatory")
@@ -3329,12 +3003,10 @@ for y in ys:
         ax = axs[i + 1]
         data, bins = filter_and_bin(group, y)
 
-        # histplot(data, y, bins, ax)
         lineplot(data, y, ax)
         ax.set(title=remapper(cell_type))
 
     for ax in axs.flat:
-        # ax.spines["bottom"].set_visible(False)
         ax.set(xlabel="", xlim=(0, 0.15))
         if y == "transformed_um_y":
             for bound in layer_bounds:
@@ -3382,8 +3054,6 @@ cols = [
     "post_euc_distance_to_nuc_um",
     "post_path_distance_to_nuc_um",
     "transformed_um_y",
-    # "post_delta_depth",
-    # "post_max_dist_to_tip_um",
 ]
 spine_base_data = base_data.groupby("spine_group_id")[cols].mean()
 
@@ -3422,8 +3092,6 @@ save_matplotlib_figure(
 hue_order = ["BC", "MC"]
 pre_broad_type = ["inhibitory"]
 
-# hue_order = ["TH", "23P", "4P"]
-# pre_broad_type = ["excitatory", "thalamic"]
 
 y = "post_euc_distance_to_nuc"
 base_data = (
@@ -3460,12 +3128,9 @@ ax = axs[0]
 sns.histplot(
     data=base_data.query("pre_cell_type == 'BC'"),
     y=f"{y}_um",
-    # hue="pre_broad_type",
-    # hue_order=hue_order,
     ax=ax,
     element="poly",
     stat="density",
-    # common_norm=False,
     legend=False,
     color=CELL_TYPE_PALETTE["inhibitory"],
     alpha=0.1,
@@ -3473,16 +3138,12 @@ sns.histplot(
 sns.histplot(
     data=base_data.query("pre_cell_type == 'MC'"),
     y=f"{y}_um",
-    # hue="pre_broad_type",
-    # hue_order=hue_order,
     ax=ax,
     element="poly",
     stat="density",
-    # common_norm=False,
     legend=False,
     color=CELL_TYPE_PALETTE["inhibitory"],
     linestyle="--",
-    # fill=False,
     alpha=0.1,
     linewidth=2,
 )
@@ -3616,27 +3277,6 @@ save_matplotlib_figure(
 
 
 # %%
-# import statsmodels.api as sm
-# from sklearn.preprocessing import QuantileTransformer, StandardScaler  # noqa
-
-# factors = ["log_spine_size_nm3", "post_euc_distance_to_nuc", "is_thalamic"]
-# base_data["is_thalamic"] = (base_data["pre_broad_type"] == "thalamic").astype(int)
-# base_data["log_spine_size_nm3"] = np.log(base_data["spine_size_nm3"])
-# fit_data = base_data[factors + ["is_multi"]].dropna()
-# fit_data["post_euc_distance_to_nuc"] = fit_data["post_euc_distance_to_nuc"] / 1000
-# endog = fit_data["is_multi"].astype(int)
-# exog = fit_data[factors]
-
-# normalizer = QuantileTransformer()
-# exog = normalizer.fit_transform(exog)
-
-# model = sm.GLM(endog, exog, family=sm.families.Gaussian())
-# # model = sm.Logit(endog, exog)
-# res = model.fit()
-# print(res.summary())
-
-
-# %%
 
 fig, axs = plt.subplots(2, 1, figsize=(6, 6), sharex=True, layout="constrained")
 ax = axs[0]
@@ -3654,7 +3294,6 @@ ax = axs[1]
 sns.histplot(
     data=base_data,
     x=f"{y}_um",
-    # y="is_multi",
     hue="pre_cell_type",
     hue_order=hue_order,
     ax=ax,
@@ -3686,7 +3325,6 @@ data = (
     all_pre_synapses.query(
         "pre_cell_type == @pre_cell_type and post_broad_type == @post_broad_type"
     )
-    # .query("tag == 'spine'")
     .groupby("n_synapses_in_connection")["tag_detailed"]
     .value_counts(normalize=True)
     .reset_index()
@@ -3699,7 +3337,6 @@ sns.lineplot(
     y="proportion",
     hue="tag_detailed",
     hue_order=["soma", "shaft", "single_spine", "multi_spine"],
-    # hue_order=["single_spine", "multi_spine"],
     marker="o",
     ax=ax,
     palette=COMPARTMENT_PALETTE_MUTED_HEX,
@@ -3765,8 +3402,6 @@ elif feature_name == "cell_type":
     color_items = sns.color_palette("tab10")
     palette = dict(zip(np.unique(feature), color_items))
     colors = [palette[x] for x in feature]
-    # colors = [CELL_TYPE_PALETTE[x] for x in feature]
-
 
 sns.clustermap(
     conn_distances,
@@ -3778,46 +3413,7 @@ sns.clustermap(
     yticklabels=False,
 )
 
-print(np.unique(feature))
 color_items
-
-
-# %%
-# from sklearn.manifold import MDS, ClassicalMDS  # noqa
-
-# projector = MDS(
-#     dissimilarity="precomputed",
-#     max_iter=1000,
-#     init="classical_mds",
-#     eps=1e-7,
-#     n_components=2,
-#     n_init=1,
-# )
-
-# # projector = ClassicalMDS(metric='precomputed')
-# # projector = UMAP(metric='precomputed')
-
-# data = column_cell_info.loc[layer_23P_cells].copy()
-
-# X = projector.fit_transform(conn_distances)
-# print(X.shape)
-# print(projector.n_components)
-
-# data["MDS0"] = X[:, 0]
-# data["MDS1"] = X[:, 1]
-
-# fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-
-# sns.scatterplot(
-#     data=data,
-#     x="MDS0",
-#     y="MDS1",
-#     hue="cell_type",
-#     ax=ax,
-#     palette="tab10",
-# )
-
-# sns.move_legend(ax, bbox_to_anchor=(1, 1), loc="upper left")
 
 
 # %%
@@ -3842,25 +3438,9 @@ multis = syns.groupby("spine_group_id").agg(
 )
 multis = multis.sort_values("ctr_pt_position_y")
 
-# from caveclient import CAVEclient
-# from nglui.statebuilder import ViewerState
-
-# client = CAVEclient("minnie65_phase3_v1")
-# vs = ViewerState(client=client)
-# vs.add_layers_from_client()
-# vs.add_segments([root_id])
-# vs.add_segmentation_layer(vs.layers[-1].source, name="pre")
-# vs.add_points(
-#     data=multis,
-#     point_column="ctr_pt_position",
-#     segment_column="pre_pt_root_id",
-#     linked_segmentation="pre",
-# )
-# vs.to_browser(browser="firefox")
 
 # %% LOOK AT P MULTI AS A FUNCTION OF SPATIAL FACTORS BUT FOR INDIVIDUAL CELLS
-# data = all_pre_synapses.query('post_broad_type == "excitatory"').query("tag == 'spine'")
-# post_cell_type = "23P"
+
 data = all_post_synapses.query(
     "post_broad_type == 'excitatory' and tag == 'spine' and post_compartment != 'axon'"
 ).copy()
@@ -3880,7 +3460,6 @@ data["is_multi"] = data["tag_detailed"] == "multi_spine"
 
 bins = np.geomspace(1e6, 1e9, 100)
 
-# data["spine_size_bin"] = pd.cut(data["spine_size_nm3"], bins=bins)
 data["spine_size_bin"] = pd.qcut(data["spine_size_nm3"], q=50)
 data["spine_size_bin_mid"] = data["spine_size_bin"].apply(lambda x: x.mid)
 data["spine_size_bin_lower"] = data["spine_size_bin"].apply(lambda x: x.left)
@@ -3894,7 +3473,6 @@ fig, axs = plt.subplots(
 
 y = "post_path_distance_to_nuc"
 y = "post_delta_depth"
-# y = 'post_radial_distance_to_nuc'
 for i, (root_id, subdata) in enumerate(data.groupby("post_pt_root_id")):
     if i >= len(axs.flat):
         break
@@ -3903,8 +3481,6 @@ for i, (root_id, subdata) in enumerate(data.groupby("post_pt_root_id")):
         data=subdata,
         y=y,
         ax=ax,
-        # log_scale=True,
-        # bins=30,
         bins=30,
         hue="tag_detailed",
         element="step",
@@ -3961,8 +3537,6 @@ features = features.drop(columns="p_multi")
 
 # %% BUILD LINEAR REGRESSION MODEL FOR P_MULTI PREDICTION
 
-# model = LinearRegression()
-
 pipeline = Pipeline([("scaler", StandardScaler()), ("regressor", RidgeCV())])
 
 X = features.sample(frac=1.0)
@@ -3994,7 +3568,6 @@ fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 sns.histplot(
     data=data,
     x="spine_size_nm3",
-    # x="size",
     hue="tag_detailed",
     hue_order=["single_spine", "multi_spine"],
     ax=ax,
@@ -4086,7 +3659,6 @@ def compare_values(syns, x):
 fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharex=True, sharey=True)
 
 x = "spine_size_nm3"
-# x = 'size'
 if x == "size":
     xlabel = "Cleft 1 size (vx)"
     ylabel = "Cleft 2 size (vx)"
@@ -4131,8 +3703,6 @@ def comparison_plot(synapses, x, ax, title, color):
             ax=ax,
             color=color,
             bins=25,
-            # bins=50,
-            # pthresh=0.01,
             cmap="Greys",
         )
     elif PLOT_TYPE == "both":
@@ -4142,8 +3712,6 @@ def comparison_plot(synapses, x, ax, title, color):
             log_scale=True,
             ax=ax,
             color=color,
-            # bins=20,
-            # bins=50,
             pthresh=None,
             cmap="Greys",
             zorder=2,
@@ -4227,17 +3795,6 @@ spine_table.loc[spine_table[spine_table["is_multi"]].index, "tag_detailed"] = (
 )
 
 if True:
-    # import joblib
-
-    # model = joblib.load(
-    #     "/Users/ben.pedigo/code/meshrep/meshrep/models/true_multi_rf.joblib"
-    # )
-    # predictions = model.predict(spine_table[model.feature_names_in_])
-    # spine_table = spine_table.drop(
-    #     [col for col in spine_table.columns if "hks" in col], axis=1, errors="ignore"
-    # )
-
-    # spine_table["is_multi_prediction"] = predictions
     spine_table["tag_detailed_original"] = "single_spine"
     spine_table.loc[
         spine_table[spine_table["n_pre_pt_root_ids"] > 1].index, "tag_detailed_original"
@@ -4286,9 +3843,6 @@ post_spines["spine_size_bin_mid"] = (
 )
 
 # %% SPINE SIZE VS PROBABILITY OF MULTI, FOR ALL EXCITATORY
-
-# data["spine_size_bin"] = pd.cut(data["spine_size_nm3"], bins=bins)
-# post_spines["spine_size_bin"] = pd.qcut(data["spine_size_nm3"], q=50)
 
 common_norm = False
 if not common_norm:
@@ -4344,10 +3898,6 @@ save_matplotlib_figure(fig, "spine_size_vs_p_multi", figure_out_path)
 # %% SPINE SIZE VS PROBABILITY OF MULTI, FOR ALL EXCITATORY, ROTATED
 
 common_norm = False
-# if not common_norm:
-#     ylabel = "Normalized\ndensity"
-# else:
-#     ylabel = "Density"
 x = "size_nm3"
 fig, axs = plt.subplots(1, 2, figsize=(4.58, 7.17), sharey=True)
 ax = axs[0]
@@ -4475,8 +4025,6 @@ sns.histplot(
     log_scale=True,
     x="spine_size_nm3",
     hue_order=["thalamic", "excitatory", "inhibitory"],
-    # x = 'size',
-    # hue_order=['thalamic', 'excitatory', 'inhibitory'],
     bins=50,
     stat="density",
     ax=ax,
@@ -4576,7 +4124,6 @@ sns.lineplot(
 )
 ax.set(ylabel="Proportion\nmulti-spine")
 sns.move_legend(ax, "upper left", title="Presynaptic axon")
-# bins = np.geomspace(quantiles[low], quantiles[high], 20)
 bins = 25
 ax = axs[1]
 sns.histplot(
@@ -4692,21 +4239,11 @@ save_matplotlib_figure(
 )
 
 # %%
-# x = "post_p_spine_synapse"
 x = "post_p_spine_site_is_multi"
 data = cell_info.query(
     "cell_type == '23P' and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
 )
 x_vals = data[x]
-# sns.histplot(
-#     data=data,
-#     x=x,
-#     # hue="in_column",
-#     stat="proportion",
-#     # bins=50,
-#     common_norm=False,
-#     # log_scale=True,
-# )
 
 # compare normal and log normal fits
 
@@ -4729,19 +4266,13 @@ for name, dist in distributions.items():
     loglik = np.sum(dist.logpdf(x_vals, *params))
     print(f"{name} loglik: {loglik}")
 
-
-# mu_log, std_log = norm.fit(np.log(x_vals))
-
 #  PLOT THE FITS
 fig, ax = plt.subplots(1, 1, figsize=(6, 4))
 sns.histplot(
     data=data,
     x=x,
-    # hue="in_column",
     stat="density",
-    # bins=50,
     common_norm=False,
-    # log_scale=True,
     color="black",
     ax=ax,
 )
@@ -4754,12 +4285,6 @@ for dist_name, params in distribution_params.items():
     ax.plot(x_fit, p_norm, "--", label=f"{dist_name}", linewidth=1.5, alpha=0.9)
 
 ax.legend()
-
-# plot log normal fit
-# p_lognorm = norm.pdf(np.log(x_fit), mu_log, std_log) / x_fit
-# p_lognorm = lognorm.pdf(x_fit, shape, loc=loc, scale=scale)
-# ax.plot(x_fit, p_lognorm, "g--", label="Log-normal fit")
-
 
 # %%
 cell_type = "5P-IT"
@@ -4784,112 +4309,6 @@ stat, pvalue = pearsonr(xs, ys)
 
 ax.set_title(f"{cell_type}: r = {stat:.2f}, p = {pvalue:.0e}")
 
-
-# %% COMPARE WITH LAYER 6 CT SPINE TARGETING CURVE
-
-if False:
-    l6ct_synapses = all_pre_synapses.query(
-        "pre_broad_type == 'inhibitory' and tag == 'spine'"
-    ).copy()
-    l6ct_spines_index = l6ct_synapses["spine_group_id"].dropna().unique().astype(int)
-
-    exc_spines = get_spine_subset(exc_spines_index)
-    l6ct_spines = get_spine_subset(l6ct_spines_index)
-    th_spines = get_spine_subset(th_spines_index)
-    fig, axs = plt.subplots(2, 1, figsize=(8, 6), sharex=True)
-    ax = axs[0]
-    sns.lineplot(
-        data=exc_spines,
-        x="spine_size_bin_mid",
-        y="is_multi",
-        color=CELL_TYPE_PALETTE["excitatory"],
-        ax=ax,
-        label="Local excitatory",
-    )
-    sns.lineplot(
-        data=l6ct_spines,
-        x="spine_size_bin_mid",
-        y="is_multi",
-        color=CELL_TYPE_PALETTE["inhibitory"],
-        ax=ax,
-        linestyle="--",
-        label="Inhibitory",
-    )
-    sns.lineplot(
-        data=th_spines,
-        x="spine_size_bin_mid",
-        y="is_multi",
-        color=CELL_TYPE_PALETTE["thalamic"],
-        ax=ax,
-        linestyle="--",
-        label="Thalamic",
-    )
-    ax.set(ylabel="Proportion\nmulti-spine")
-    sns.move_legend(ax, "upper left", title="Presynaptic axon")
-    ax = axs[1]
-    sns.histplot(
-        data=exc_spines,
-        x=x,
-        ax=ax,
-        color=CELL_TYPE_PALETTE["excitatory"],
-        alpha=0.3,
-        bins=bins,
-        # log_scale=True,
-        stat="proportion",
-        label="Excitatory",
-        element="poly",
-    )
-    sns.histplot(
-        data=l6ct_spines,
-        x=x,
-        ax=ax,
-        color=CELL_TYPE_PALETTE["inhibitory"],
-        alpha=0.3,
-        bins=bins,
-        # log_scale=True,
-        stat="proportion",
-        # label="6P-CT",
-        label="Inhibitory",
-        element="poly",
-        linestyle="--",
-    )
-    sns.histplot(
-        data=th_spines,
-        x=x,
-        ax=ax,
-        color=CELL_TYPE_PALETTE["thalamic"],
-        alpha=0.3,
-        bins=bins,
-        # log_scale=True,
-        stat="proportion",
-        label="Thalamic",
-        element="poly",
-        linestyle="--",
-    )
-    ax.set(
-        xlim=(quantiles[low], quantiles[high]),
-        xlabel="Spine volume (nm³)",
-        ylabel="Proportion of\ntargeted spines",
-    )
-    ax.set(xscale="log")
-
-    # save_matplotlib_figure(fig, "exc_vs_th_size_by_multi", figure_out_path)
-
-
-# %% FIT ISOTONIC REGRESSION FOR SPINE SIZE
-
-if False:
-    from sklearn.isotonic import IsotonicRegression
-
-    iso_reg = IsotonicRegression(
-        y_min=quantiles[low], y_max=quantiles[high], increasing=True
-    )
-    x = "size_nm3"
-    y = "is_multi"
-    iso_reg.fit(np.log(post_spines[x]), post_spines[y])
-
-    iso_reg.predict(bins)
-
 # %% ANALYZE SPINE SIZE BY PRESYNAPTIC CELL TYPE
 syns = all_pre_synapses.query(
     "post_broad_type == 'excitatory' and tag == 'spine'"
@@ -4909,13 +4328,6 @@ sns.move_legend(ax, "upper left", title="Presynaptic cell type", bbox_to_anchor=
 
 
 # %% VALIDATE SPINE GROUP MAPPING
-# synapse_table_group_map = all_pre_synapses.groupby(["post_pt_root_id", "component_id"])[
-#     "spine_group_id"
-# ].unique().explode()
-
-# spine_table_group_map = spine_table.groupby(['post_pt_root_id', 'component_id'])[
-#     'group_id'
-# ].unique().explode()
 
 all_pre_synapses_pl = (
     pl.DataFrame(all_pre_synapses)
@@ -4946,7 +4358,6 @@ result.filter(pl.col("group_id") != pl.col("spine_group_id"))
 low = 0.001
 high = 0.999
 quantiles = all_pre_synapses["spine_size_nm3"].quantile([low, high])
-# bins = np.geomspace(quantiles[low], quantiles[high], 16)
 
 exc_synapses["spine_size_bin"] = pd.cut(exc_synapses["spine_size_nm3"], bins=bins)
 th_synapses["spine_size_bin"] = pd.cut(th_synapses["spine_size_nm3"], bins=bins)
@@ -4962,14 +4373,12 @@ sns.lineplot(
     y=p_multi_exc.values,
     color=CELL_TYPE_PALETTE["excitatory"],
     ax=ax,
-    # marker='o'
 )
 sns.lineplot(
     x=p_multi_th.index.categories.mid.values,
     y=p_multi_th.values,
     color=CELL_TYPE_PALETTE["thalamic"],
     ax=ax,
-    # marker='o'
 )
 
 ax.set(ylabel="Proportion\nmulti-spine")
@@ -4983,8 +4392,6 @@ sns.histplot(
     ax=ax,
     color=CELL_TYPE_PALETTE["excitatory"],
     alpha=0.3,
-    # bins=bins,
-    # log_scale=True,
     stat="proportion",
     label="Excitatory",
     element="poly",
@@ -4995,8 +4402,6 @@ sns.histplot(
     ax=ax,
     color=CELL_TYPE_PALETTE["thalamic"],
     alpha=0.3,
-    # bins=bins,
-    # log_scale=True,
     stat="proportion",
     label="Thalamic",
     element="poly",
@@ -5059,7 +4464,6 @@ for is_targeted, post_spines in all_post_spines.groupby("is_targeted"):
         data=p_multi,
         x="spine_size_bin_mid",
         y="is_multi",
-        # color="black",
         ax=ax,
         label=is_targeted,
     )
@@ -5123,14 +4527,10 @@ for spine_group_id, spine_data in data.groupby("spine_group_id"):
 
 reg_df = pd.DataFrame(rows).set_index("spine_group_id").fillna(0)
 
-# reg_df = reg_df.query("unknown == 0")
 
 reg_df["both"] = reg_df["excitatory"] + reg_df["inhibitory"]
 reg_df["product"] = reg_df["excitatory"] * reg_df["inhibitory"]
-# reg_df = reg_df.drop(columns=["unknown"])
 
-
-# X = reg_df[["excitatory", "inhibitory"]]
 X = reg_df[["both"]]
 y = reg_df["spine_size_nm3"]
 
@@ -5176,16 +4576,7 @@ sns.scatterplot(
     ax=ax,
     color="black",
 )
-# sns.scatterplot(
-#     data=pred_df.query("is_multi == True"),
-#     x="true_spine_size_nm3",
-#     y="pred_spine_size_nm3",
-#     hue="count_map",
-#     # alpha=0.5,
-#     s=20,
-#     ax=ax,
-#     color="black",
-# )
+
 ax.set(
     xscale="log",
     yscale="log",
@@ -5249,11 +4640,9 @@ sns.histplot(
     x=x,
     weights=weights,
     hue="mtype",
-    # hue='visual_area',
     bins=50,
     log_scale=False,
     hue_order=["L4a", "L4b", "L4c"],
-    # hue_order=["L2a", "L2b", "L2c"],
     element="step",
     stat="density",
     common_norm=False,
@@ -5280,7 +4669,6 @@ scatter_kws = dict(
     hue="pre_cell_type",
     y="ctr_pt_position_y",
     x="ctr_pt_position_x",
-    # hue_order=["6P-IT", "6P-CT"],
     legend=False,
     ax=axs[0],
 )
@@ -5289,7 +4677,6 @@ sns.scatterplot(data=select_syns, **scatter_kws)
 
 ax = axs[1]
 histplot_kws = dict(
-    # bins=40,
     stat="density",
     common_norm=True,
     hue="pre_cell_type",
@@ -5302,8 +4689,6 @@ histplot_kws = dict(
 )
 sns.histplot(data=select_syns, y="ctr_pt_position_y", ax=ax, **histplot_kws)
 ax.invert_yaxis()
-
-# fig.suptitle(f"Outputs to excitatory neurons on {tag}")
 
 
 # %% COMPARE DEPTH DISTRIBUTIONS BY COMPARTMENT
@@ -5604,7 +4989,6 @@ sns.histplot(
     bins=50,
     stat="density",
     common_norm=True,
-    # fill=False,
     palette=COMPARTMENT_PALETTE_MUTED_HEX,
 )
 
@@ -5626,13 +5010,10 @@ for i, (pre_pt_root_id, group) in enumerate(
 ):
     ax = axs[i // n_cols, i % n_cols]
     sns.histplot(
-        # data=group.query("post_broad_type == 'inhibitory'"),
         data=group,
         x="pre_path_distance_to_nuc",
-        # hue="post_broad_type",
         hue="tag",
         hue_order=["spine", "shaft", "soma"],
-        # hue_order=["excitatory", "inhibitory"],
         ax=ax,
         log_scale=False,
         element="step",
@@ -5644,19 +5025,7 @@ for i, (pre_pt_root_id, group) in enumerate(
         bins=np.geomspace(100_000, 1_000_000, 50),
     )
     ax.set(ylabel="", yticks=[])
-    # sns.histplot(
-    #     data=group.query("post_broad_type == 'excitatory'"),
-    #     x="pre_distance_to_root_um",
-    #     hue="tag",
-    #     hue_order=["spine", "shaft", "soma"],
-    #     ax=ax,
-    #     log_scale=True,
-    #     element="step",
-    #     stat="density",
-    #     common_norm=False,
-    #     palette=COMPARTMENT_PALETTE_MUTED_HEX,
-    #     legend=False,
-    # )
+
     if i >= n_cells - 1:
         break
 
@@ -5697,7 +5066,6 @@ count_table = (
     .rename("count")
     .to_frame()
     .reset_index()
-    # .rename(columns={np.nan: "unknown"})
     .pivot(
         index=["post_pt_root_id", "component_id", "post_broad_type"],
         columns=["pre_broad_type"],
@@ -5706,7 +5074,6 @@ count_table = (
     .fillna(0)
     .astype(int)
     .reset_index(level="post_broad_type")
-    # .query("unproofread == 0")
 )
 # %%
 multi_synapses.groupby(
@@ -5726,15 +5093,6 @@ subset_count_table = count_table.loc[
     count_table.index.intersection(annotations.query("singlehead").index)
 ]
 
-# subset_count_table = count_table
-
-
-# query_roots = cell_info.query('cell_type.isin(["23P", "4P"])').index
-# subset_count_table = (
-#     subset_count_table.reset_index()
-#     .query("post_pt_root_id.isin(@query_roots)")
-#     .set_index(["post_pt_root_id", "component_id"])
-# )
 
 # %% DEFINE COUNT SUMMARIZATION FUNCTION
 pre_codes = ["thalamic", "excitatory", "inhibitory"]
@@ -5742,7 +5100,6 @@ post_codes = ["excitatory", "inhibitory"]
 
 
 def summarize_counts(count_table):
-    # post_codes = ["excitatory", "inhibitory"]
     count_table["total"] = count_table[pre_codes].sum(axis=1)
     count_summary = (
         count_table.query("total > 1")
@@ -5774,14 +5131,9 @@ comparison = full_count_summary.set_index(
 # %% COMPUTE EXCITATORY SUBSET STATISTICS
 comparison.query("post_broad_type == 'excitatory'")[["count", "count_subset"]].sum()
 
-
 # %% VISUALIZE MULTI SPINE COUNT DISTRIBUTIONS
 
 plt.rcParams["figure.dpi"] = 300
-
-# fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-
-# code_counts = codes.groupby(codes.columns.tolist()).size().sort_values(ascending=False)
 
 x = np.arange(len(code_counts))
 y = code_counts.values
@@ -5795,7 +5147,6 @@ fig, axs = plt.subplots(
 )
 
 ax = axs[0]
-# ax.bar(x, y, color="black", alpha=0.5)
 sns.barplot(
     data=count_summary,
     y="count",
@@ -5804,7 +5155,6 @@ sns.barplot(
     hue_order=post_codes,
     palette=CELL_TYPE_PALETTE,
     ax=ax,
-    # color="black",
     alpha=0.5,
 )
 ax.set_ylabel("Multi-input spine count")
@@ -5826,7 +5176,6 @@ for idx, row in count_summary.iterrows():
 
 ax = axs[1]
 indicator_matrix = code_counts.index.to_frame(index=False).T
-# indicator_matrix = indicator_matrix.loc[marginals.index]
 
 point_y, point_x = np.nonzero(indicator_matrix.values)
 ax.scatter(
@@ -5936,7 +5285,6 @@ sns.lineplot(
     hue="spine_n_pre_pt_root_ids",
     hue_order=["1", "2", "3"],
     palette="Blues",
-    # palette="viridis",
     ax=ax,
 )
 sns.move_legend(
@@ -6071,7 +5419,6 @@ sns.lineplot(
 )
 ax.set(ylabel=ylabel, xlabel=xlabel, title=pre_title)
 legend = ax.get_legend()
-# legend.set_title("Target")
 handles, labels = ax.get_legend_handles_labels()
 
 new_labels = ["Single-input spine", "Multi-input spine"]
@@ -6131,13 +5478,10 @@ vs.to_browser(shorten=True)
 x = "pre_to_exc_spine_synapses"
 x = "pre_to_exc_single_spine_synapses"
 x = "pre_to_exc_multi_spine_synapses"
-# x = "pre_to_exc_p_multi_spine_synapse"
 x = "pre_to_exc_p_single_spine_synapse"
 x = "pre_to_exc_p_spine_synapse"
 x = "pre_to_exc_p_spine_synapse_is_multi"
 y = "post_p_spine_synapse"
-# y = 'post_p_spine_site_is_multi'
-# y = "pt_position_um_y"
 
 
 fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -6200,21 +5544,6 @@ sns.lineplot(
 )
 ax.set(ylabel=ylabel, xlabel=xlabel, title=post_title)
 
-# %% SETUP SPINE MORPHOMETRY ANALYSIS
-# cloud_morphometry_path = (
-#     "gs://bdp-ssa/minnie65_phase3_v1/absolute-solo-yak/spine_morphometry_deltalake"
-# )
-
-# spine_size_table = pl.scan_delta(cloud_morphometry_path).select(
-#     [
-#         "post_pt_root_id",
-#         "component_id",
-#         "size_nm3",
-#     ]
-# )
-# spine_size_table.collect_schema()
-
-
 # %% ANALYZE EXCITATORY SPINE SIZE DISTRIBUTIONS, GAUSSIAN MIXTURE MODEL FITTING
 query_synapses = synapses.query(
     "tag == 'spine' and post_broad_type == 'excitatory' and pre_axon_cleaned and pre_compartment == 'axon' and post_compartment == 'dendrite' and pre_broad_type == 'excitatory'"
@@ -6256,10 +5585,8 @@ def fit_and_plot_gmm(x, ax, color="red"):
     ax.plot(
         x_range,
         y_gmm * 2.25,  # Scale to match histogram
-        # color="red",
         linewidth=2,
         color=color,
-        # label="GMM Fit",
     )
 
     # show each of the components of the mixture model
@@ -6314,97 +5641,6 @@ fit_and_plot_gmm(
 )
 
 
-# %% SETUP NEUROGLANCER VISUALIZATION
-
-if False:
-    vs = ViewerState(client=client)
-    state = (
-        vs.add_layers_from_client(skeleton_source=False, alpha_3d=0.9)
-        .add_points(
-            put_soma_spines.query("pre_proofread"),
-            name="putative soma spines",
-            point_column=[
-                "ctr_pt_position_x",
-                "ctr_pt_position_y",
-                "ctr_pt_position_z",
-            ],
-            description_column="pre_cell_type",
-            segment_column="segments",
-        )
-        .set_viewer_properties(layout="3d")
-        .to_browser(browser="firefox")
-    )
-
-
-# %% ANALYZE THALAMIC-INHIBITORY DOUBLE INPUTS
-
-if False:
-    indices = count_table.query(
-        "excitatory == 0 & inhibitory == 1 & thalamic == 1 & post_broad_type == 'inhibitory'"
-    ).index
-
-    double_df = (
-        multi_synapses.set_index(["post_pt_root_id", "component_id"])
-        .loc[indices]
-        .reset_index()
-    )
-    double_df = double_df.groupby(["post_pt_root_id", "component_id"]).agg(
-        {
-            "ctr_pt_position_x": "mean",
-            "ctr_pt_position_y": "mean",
-            "ctr_pt_position_z": "mean",
-            "pre_pt_root_id": lambda x: list(x.unique()),
-            # "post_pt_root_id": lambda x: list(x.unique()),
-        }
-    )
-    double_df["pt_a"] = (
-        multi_synapses.groupby(["post_pt_root_id", "component_id"])[
-            ["ctr_pt_position_x", "ctr_pt_position_y", "ctr_pt_position_z"]
-        ]
-        .first(0)
-        .apply(list, axis=1)
-    )
-    double_df["pt_b"] = (
-        multi_synapses.groupby(["post_pt_root_id", "component_id"])[
-            ["ctr_pt_position_x", "ctr_pt_position_y", "ctr_pt_position_z"]
-        ]
-        .last(1)
-        .apply(list, axis=1)
-    )
-
-    double_df = double_df.reset_index()
-    double_df["root_ids"] = double_df.apply(
-        lambda row: np.unique(row["pre_pt_root_id"] + [row["post_pt_root_id"]]), axis=1
-    )
-    double_df["name"] = [
-        # f"{row.pre_pt_root_id[0]}_{row.pre_pt_root_id[1]}"
-        f"{row.post_pt_root_id}_{row.component_id}"
-        for _, row in double_df.iterrows()
-    ]
-
-    target_url = (
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/"
-    )
-    vs = ViewerState(client=client, target_url=target_url)
-    state = (
-        vs.add_layers_from_client(skeleton_source=False, alpha_3d=0.9)
-        .add_lines(
-            double_df,
-            name="lines",
-            point_a_column="pt_a",
-            point_b_column="pt_b",
-            segment_column="root_ids",
-            description_column="name",
-            tags=["singlehead", "y", "merge", "noncanonical", "nonspine"],
-        )
-        .set_viewer_properties(layout="3d")
-        .to_dict()
-    )
-    state["layers"][1]["source"][0]["state"] = {
-        "focusMeshCulling": True,
-        "focusBoundingBoxSize": 12,
-    }
-    ViewerState(base_state=state, target_url=target_url).to_browser(browser="firefox")
 
 # %% ANALYZE EXCITATORY-INHIBITORY DUAL INPUTS
 
@@ -6451,7 +5687,6 @@ sns.scatterplot(
     hue="pre_broad_type",
     palette=CELL_TYPE_PALETTE,
     hue_order=["excitatory", "inhibitory"],
-    # hue_order=["23P", "4P", "5P-IT", "5P-ET", "5P-NP", "6P-IT", "6P-CT"],
     s=25,
     ax=ax,
     legend=False,
@@ -6492,7 +5727,6 @@ ax.text(
     transform=ax.transAxes,
     fontsize="medium",
 )
-# sns.move_legend(ax, loc="upper left", title="Pre cell type", bbox_to_anchor=(1, 1))
 
 ax = axs[1]
 data = query_multi_synapses.query('pre_broad_type == "inhibitory"')
@@ -6502,7 +5736,6 @@ sns.scatterplot(
     y=y,
     hue="pre_broad_type",
     hue_order=["excitatory", "inhibitory"],
-    # hue_order=["BC", "MC", "BPC", "NGC"],
     palette=CELL_TYPE_PALETTE,
     s=25,
     ax=ax,
@@ -6545,7 +5778,6 @@ ax.text(
     transform=ax.transAxes,
     fontsize="medium",
 )
-# sns.move_legend(ax, loc="upper left", title="Pre\ncell type", bbox_to_anchor=(1, 1))
 save_matplotlib_figure(fig, "multi_synapse_size_vs_spine_volume", figure_out_path)
 
 
@@ -6590,7 +5822,6 @@ data = (
     synapses.query("post_broad_type == 'excitatory'")
     .query("post_compartment == 'dendrite'")
     .query("pre_axon_cleaned")
-    # .query("pre_in_selection")
     .query("post_in_selection")
     .query("pre_compartment == 'axon'")
     .query("pre_broad_type == 'excitatory'")
@@ -6620,7 +5851,6 @@ data = (
     synapses.query("post_broad_type == 'excitatory'")
     .query("post_compartment == 'dendrite'")
     .query("pre_axon_cleaned")
-    # .query("pre_in_selection")
     .query("post_in_selection")
     .query("pre_compartment == 'axon'")
     .query("pre_broad_type == 'excitatory'")
@@ -6668,13 +5898,10 @@ save_matplotlib_figure(fig, "spine_synapse_area_corr_by_multi", figure_out_path)
 
 frac = 0.1
 
-# fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-
 fig, axs = plt.subplots(
     2,
     3,
     figsize=(12 * 1.2, 5 * 1.2),
-    # layout="tight",
     sharex=True,
     sharey="row",
     gridspec_kw={"height_ratios": [1, 0.5], "hspace": 0.05, "wspace": 0.05},
@@ -6686,7 +5913,6 @@ foreground_kws = dict(
     x="transformed_um_x",
     y="transformed_um_y",
     s=0.2,
-    # alpha=0.2,
     linewidth=0,
     hue="tag",
     palette=COMPARTMENT_PALETTE_MUTED_HEX,
