@@ -1,4 +1,8 @@
 # %% IMPORTS
+import time
+
+start_time = time.time()
+
 import pickle
 
 import matplotlib as mpl
@@ -5641,7 +5645,6 @@ fit_and_plot_gmm(
 )
 
 
-
 # %% ANALYZE EXCITATORY-INHIBITORY DUAL INPUTS
 
 query_count_table = subset_count_table.query(
@@ -5960,3 +5963,14 @@ ax.set(xlabel="X (um)")
 ax.set_aspect("equal", adjustable="box")
 
 save_matplotlib_figure(fig, "synapse_summary_spatial", figure_out_path)
+
+
+# %%
+
+print("----------")
+print("\n\n")
+elapsed = time.time() - start_time
+minutes = elapsed / 60
+print(f"Elapsed time to run script: {minutes:.2f}")
+print("\n\n")
+print("----------")
