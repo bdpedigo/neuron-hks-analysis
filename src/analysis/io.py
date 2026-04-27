@@ -221,7 +221,6 @@ def save_pyvista_figure(
     if not (out_path / subfolder).exists():
         (out_path / subfolder).mkdir(parents=True, exist_ok=True)
 
-    
     if "png" in formats:
         plotter.screenshot(
             out_path / subfolder / f"{filename}.png",
@@ -299,6 +298,7 @@ def save_pyvista_figure(
         img_path = out_path / subfolder / f"{filename}.png"
         display(Image(filename=img_path))
 
+
 def save_matplotlib_figure(
     fig: plt.Figure,
     filename: str,
@@ -366,9 +366,13 @@ def load_model(model_name):
 
 def _read_root_synapses(root_id: int, side="post", version=1412) -> pd.DataFrame:
     if side == "post":
-        file_path = DATA_PATH / f"column_labeled_post_synapses_{version}" / f"{root_id}.csv.gz"
+        file_path = (
+            DATA_PATH / f"column_labeled_post_synapses_{version}" / f"{root_id}.csv.gz"
+        )
     elif side == "pre":
-        file_path = DATA_PATH / f"column_labeled_pre_synapses_{version}" / f"{root_id}.csv.gz"
+        file_path = (
+            DATA_PATH / f"column_labeled_pre_synapses_{version}" / f"{root_id}.csv.gz"
+        )
     else:
         raise ValueError("side must be 'post' or 'pre'")
     if not os.path.exists(file_path):
@@ -451,7 +455,7 @@ TABLE_CACHE_PATH = DATA_PATH / "table_cache"
 
 
 def _get_client(version=1412):
-    return CAVEclient("minnie65_phase3_v1", version=version)
+    return CAVEclient("minnie65_public", version=version)
 
 
 def load_neuron_info(version=1412, transform_positions=True, add_thalamic=True):
@@ -478,7 +482,7 @@ def load_neuron_info(version=1412, transform_positions=True, add_thalamic=True):
 
     if add_thalamic:
         proofreading_path = (
-            TABLE_CACHE_PATH / f"v{version}" / "proofreading_status_and_strategy.csv.gz"
+            DATA_PATH / f"v{version}-proofreading_status_and_strategy.csv.gz"
         )
         if proofreading_path.exists():
             proofreading_table = pd.read_csv(proofreading_path, index_col=0)
