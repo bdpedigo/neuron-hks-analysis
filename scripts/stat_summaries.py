@@ -8,15 +8,32 @@ import pandas as pd
 import polars as pl
 import seaborn as sns
 from caveclient import CAVEclient
-from matplotlib import rcdefaults
+from matplotlib import cm, rcdefaults, ticker
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import Rectangle
+from matplotlib.ticker import NullFormatter
 from nglui.parser import StateParser
 from nglui.statebuilder import ViewerState
 from pywaffle import Waffle
-from scipy.stats import pearsonr, spearmanr
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
+from scipy.stats import (
+    lognorm,
+    norm,
+    pearsonr,
+    powernorm,
+    probplot,
+    spearmanr,
+    weibull_min,
+)
+from sklearn.covariance import EllipticEnvelope
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.preprocessing import QuantileTransformer
+from sklearn.linear_model import LinearRegression, RidgeCV
+from sklearn.metrics import classification_report, pairwise_distances
+from sklearn.mixture import GaussianMixture
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
 from analysis import (
     CELL_TYPE_CATEGORIES,
@@ -227,7 +244,7 @@ cell_info["in_column"] = cell_info.index.isin(column_info.index)
 
 
 # %% BUILD LDA CLASSIFIER ON SPINE FEATURES
-from sklearn.metrics import classification_report
+
 
 features = [
     "post_p_spine_synapse",
@@ -272,7 +289,6 @@ posterior_excitatory = lda.predict_proba(X_transformed)[
 posterior_excitatory = pd.Series(posterior_excitatory.reshape(-1), index=X.index[mask])
 cell_info["p_excitatory_lda"] = posterior_excitatory
 cell_info["uncertainty"] = np.abs(cell_info["p_excitatory_lda"] - 0.5) * 2
-
 
 
 # %% COMPARE LDA SCORES FOR COLUMN VS WHOLE DATASET
@@ -1664,7 +1680,6 @@ data = cell_info.query(
 data = cell_info.query(
     "post_total_synapses >= 500 and (post_spine_synapses > 1) and (post_shaft_synapses > 1) and (broad_type == broad_type_lda_prediction)"
 )
-from analysis import CELL_TYPE_CATEGORIES
 
 print(CELL_TYPE_CATEGORIES)
 exc_categories = CELL_TYPE_CATEGORIES[1:8]
@@ -1731,8 +1746,6 @@ for i, (name, group) in enumerate(data.groupby("cell_type", observed=True)):
     ax.text(0.05, 0.9, f"r={stat:.2f}", transform=ax.transAxes)
 
 # %% EVALUATION OF SPINE SHAFT RELATIONSHIP OUTLIER DETECTION
-from sklearn.covariance import EllipticEnvelope
-from sklearn.mixture import GaussianMixture
 
 fig, axs = plt.subplots(2, 7, figsize=(20, 20 / 7 * 2), sharex=True, sharey=True)
 
@@ -2503,9 +2516,6 @@ ax.legend()
 save_matplotlib_figure(fig, "multi_spine_proportion_null_23P", figure_out_path)
 
 # %% LOGNORMAL FIT OF MULTI SPINE PROPORTION FOR EXCITATORY CELLS
-import numpy as np
-from matplotlib.ticker import NullFormatter
-from scipy.stats import lognorm, probplot
 
 x = "post_p_spine_site_is_multi"
 cell_type = "excitatory"
@@ -2601,7 +2611,6 @@ ax.set(ylabel="Density\n(cells)")
 # x_vals = query_cell_info[x].dropna().values
 # fig, ax, fit = histplot_with_lognorm_fit(x_vals, color="red", ax=axs[0])
 
-from matplotlib import ticker
 
 y = "post_p_spine_synapse"
 ax = axs[1]
@@ -3152,7 +3161,6 @@ def lineplot(data, y, ax):
     )
     ax.set_xlabel("Proportion of \nspines with\nmultiple inputs")
     ax.set_xlim(0, ax.get_xlim()[1])
-
 
 
 figsize = (4.51, 7.17)
@@ -3736,12 +3744,6 @@ print(layer_23P_cells.shape)
 X = pre_conn_vectors.values
 print(X.shape)
 
-from matplotlib import cm
-from scipy.cluster.hierarchy import linkage
-from scipy.spatial.distance import squareform
-from sklearn.metrics import pairwise_distances
-
-from analysis import CELL_TYPE_PALETTE
 
 conn_distances = pairwise_distances(X, metric="cosine")
 print(conn_distances.shape)
@@ -3958,10 +3960,6 @@ y = features["p_multi"]
 features = features.drop(columns="p_multi")
 
 # %% BUILD LINEAR REGRESSION MODEL FOR P_MULTI PREDICTION
-from sklearn.linear_model import LinearRegression, RidgeCV
-from sklearn.model_selection import cross_val_score
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
 # model = LinearRegression()
 
@@ -4712,7 +4710,6 @@ x_vals = data[x]
 
 # compare normal and log normal fits
 
-from scipy.stats import lognorm, norm, powernorm, weibull_min
 
 # fit
 distributions = {
@@ -5132,11 +5129,6 @@ reg_df["both"] = reg_df["excitatory"] + reg_df["inhibitory"]
 reg_df["product"] = reg_df["excitatory"] * reg_df["inhibitory"]
 # reg_df = reg_df.drop(columns=["unknown"])
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
-from sklearn.model_selection import train_test_split
 
 # X = reg_df[["excitatory", "inhibitory"]]
 X = reg_df[["both"]]
