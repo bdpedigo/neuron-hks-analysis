@@ -11,13 +11,10 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import seaborn as sns
-from caveclient import CAVEclient
 from matplotlib import cm, rcdefaults, ticker
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 from matplotlib.patches import Rectangle
 from matplotlib.ticker import NullFormatter
-from nglui.parser import StateParser
-from nglui.statebuilder import ViewerState
 from pywaffle import Waffle
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
@@ -2169,37 +2166,47 @@ pre_props
 
 
 def get_multi_annotations():
-    returned_links = [
-        "https://spelunker.cave-explorer.org/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/4811205330862080",  # EE on E
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/6484872683061248",  # EI on E
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5527458345385984",  # IT on E
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5391743175360512",  # II on E
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5173236714176512",  # ET on E
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/6098825721675776",  # EE on I
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5201463239245824",  # EI on I
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5047802907328512",  # ET on I
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/4719068014706688",  # II on I
-        "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/6041454261567488",  # IT on I
-    ]
+    multi_annotations_path = DATA_PATH / "multi_spine_annotations.parquet"
 
-    client = CAVEclient("minnie65_phase3_v1", version=1412)
+    if not multi_annotations_path.exists():
+        # NOTE running thie requires having set up caveclient
+        from caveclient import CAVEclient
+        from nglui.parser import StateParser
 
-    dfs = []
-    for link in returned_links:
-        state_id = int(link.split("/")[-1])
-        state = client.state.get_state_json(state_id)
-        parser = StateParser(state)
-        df = parser.annotation_dataframe(expand_tags=True)
-        dfs.append(df)
+        returned_links = [
+            "https://spelunker.cave-explorer.org/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/4811205330862080",  # EE on E
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/6484872683061248",  # EI on E
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5527458345385984",  # IT on E
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5391743175360512",  # II on E
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5173236714176512",  # ET on E
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/6098825721675776",  # EE on I
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5201463239245824",  # EI on I
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5047802907328512",  # ET on I
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/4719068014706688",  # II on I
+            "https://cj-mesh-bounds-dot-neuroglancer-dot-seung-lab.ue.r.appspot.com/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/6041454261567488",  # IT on I
+        ]
 
-    annotations = pd.concat(dfs, ignore_index=True)
-    annotations["post_pt_root_id"] = (
-        annotations["description"].str.split("_").str[0].astype(int)
-    )
-    annotations["component_id"] = (
-        annotations["description"].str.split("_").str[1].astype(int)
-    )
-    annotations = annotations.set_index(["post_pt_root_id", "component_id"])
+        client = CAVEclient("minnie65_public", version=1412)
+
+        dfs = []
+        for link in returned_links:
+            state_id = int(link.split("/")[-1])
+            state = client.state.get_state_json(state_id)
+            parser = StateParser(state)
+            df = parser.annotation_dataframe(expand_tags=True)
+            dfs.append(df)
+
+        annotations = pd.concat(dfs, ignore_index=True)
+        annotations["post_pt_root_id"] = (
+            annotations["description"].str.split("_").str[0].astype(int)
+        )
+        annotations["component_id"] = (
+            annotations["description"].str.split("_").str[1].astype(int)
+        )
+        annotations = annotations.set_index(["post_pt_root_id", "component_id"])
+        annotations.to_parquet(multi_annotations_path)
+    else:
+        annotations = pd.read_parquet(multi_annotations_path)
     return annotations
 
 
@@ -5446,38 +5453,6 @@ save_variables(
     prefix="column_summary_", bc_post_euc_distance_to_nuc_q95=q / 1000, format="{:.0f}"
 )
 
-
-# %% VISUALIZE BC CONNECTIONS IN NEUROGLANCER
-
-
-query_pre_synapses = all_pre_synapses.query(
-    "pre_cell_type == 'BC' and post_broad_type == 'excitatory'"
-)
-spine_connections = (
-    query_pre_synapses.groupby(["pre_pt_root_id", "post_pt_root_id"])["tag_detailed"]
-    .value_counts()
-    .unstack()
-    .sort_values(["single_spine"], ascending=False)
-)
-
-connection = spine_connections.index[0]
-
-pre_syns = query_pre_synapses.query(
-    f"(pre_pt_root_id == {connection[0]}) and (post_pt_root_id == {connection[1]})"
-)
-
-client = CAVEclient("minnie65_phase3_v1")
-vs = ViewerState(client=client)
-vs.add_layers_from_client().add_segments(connection).add_points(
-    pre_syns,
-    name="synapses",
-    point_column=["ctr_pt_position_x", "ctr_pt_position_y", "ctr_pt_position_z"],
-    data_resolution=[4, 4, 40],
-    tag_column="tag_detailed",
-    swap_visible_segments_on_move=False,
-)
-vs.to_browser(shorten=True)
-
 # %% ANALYZE BC CELL TARGETING PATTERNS
 x = "pre_to_exc_spine_synapses"
 x = "pre_to_exc_single_spine_synapses"
@@ -5971,6 +5946,6 @@ print("----------")
 print("\n\n")
 elapsed = time.time() - start_time
 minutes = elapsed / 60
-print(f"Elapsed time to run script: {minutes:.2f}")
+print(f"Elapsed time to run script: {minutes:.2f} minutes")
 print("\n\n")
 print("----------")

@@ -18,6 +18,8 @@ computer. Follow the instructions [here](https://tutorial.microns-explorer.org/q
 Currently there is only one mega-script in `./scripts`. Running it will generate many
 figure panels and save output variables. To run, do `uv run ./scripts/stat_summaries.py`.
 
+At last run, this script took about 7.5 minutes to run on my MacBook Pro laptop.
+
 ## Contact
 
 If you have any questions or comments about this code, feel free to reach out: [ben.pedigo@alleninstitute.org](mailto:ben.pedigo@alleninstitute.org).

@@ -1,1 +1,2 @@
 data/** filter=lfs diff=lfs merge=lfs -text
+data/multi_spine_annotations.parquet filter=lfs diff=lfs merge=lfs -text
