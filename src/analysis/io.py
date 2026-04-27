@@ -457,7 +457,7 @@ def _get_client(version=1412):
 def load_neuron_info(version=1412, transform_positions=True, add_thalamic=True):
     query_args = dict(desired_resolution=[1, 1, 1], split_positions=True)
 
-    table_path = TABLE_CACHE_PATH / f"v{version}" / "aibs_cell_info.csv.gz"
+    table_path = DATA_PATH / f"v{version}-aibs_cell_info.csv.gz"
     if table_path.exists():
         cell_info = pd.read_csv(table_path, index_col=0)
     else:

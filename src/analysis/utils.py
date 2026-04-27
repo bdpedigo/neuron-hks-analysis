@@ -7,17 +7,11 @@ import pyvista as pv
 import toml
 from sklearn.neighbors import NearestNeighbors
 
-from grotto.client import GrottoClient
 
 from .colors import COMPARTMENT_PALETTE
 
 # Global variable for default variables file
 DEFAULT_VARIABLES_FILE = Path(__file__).parent.parent.parent / "glued_variables.tex"
-
-
-def start_client():
-    client = GrottoClient("minnie65_phase3_v1", version=1181)
-    return client
 
 
 def project_points_to_mesh(

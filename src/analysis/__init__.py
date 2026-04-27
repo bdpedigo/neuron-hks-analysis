@@ -59,7 +59,6 @@ from .utils import (
     save_variables,
     set_matplotlib_theme,
     set_pyvista_theme,
-    start_client,
 )
 from .wrangle import get_synapse_sizes, get_validation_ids, make_label_table
 
@@ -71,7 +70,6 @@ __all__ = [
     "param_hash",
     "param_name",
     "project_points_to_mesh",
-    "start_client",
     "nan_predict",
     "COMPARTMENT_PALETTE",
     "save_pyvista_figure",

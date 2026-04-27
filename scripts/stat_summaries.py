@@ -25,10 +25,10 @@ from analysis import (
     COMPARTMENT_PALETTE_MUTED_HEX,
     DATA_PATH,
     FIG_PATH,
-    load_neuron_info,
     save_matplotlib_figure,
     save_variables,
     set_matplotlib_theme,
+    load_neuron_info
 )
 
 
@@ -68,65 +68,30 @@ cell_info = (
 )
 
 # %% LOAD SYNAPSE TABLES
-table_path = DATA_PATH / "mega_tables"
-synapses_pl = pl.read_parquet(table_path / "filtered_synapses.parquet")
+
+synapses_pl = pl.read_parquet(DATA_PATH / "filtered_synapses.parquet")
 synapses = synapses_pl.to_pandas().set_index("synapse_id")
 
 all_pre_synapses = synapses.query("pre_in_selection").copy()
 all_post_synapses = synapses.query("post_in_selection").copy()
 
-look_at_single_inhibitory_spines = False
-if look_at_single_inhibitory_spines:
-    select_synapses = (
-        synapses.query("pre_in_selection")
-        .query("post_in_selection")
-        .query("pre_broad_type == 'inhibitory'")
-        .query("post_broad_type == 'excitatory'")
-        .query("tag == 'spine'")
-        .query("~spine_is_multi")
-        .sample(500)
-        .reset_index()
-        .copy()
-    )
-    select_synapses["point"] = list(
-        zip(
-            select_synapses["ctr_pt_position_x"],
-            select_synapses["ctr_pt_position_y"],
-            select_synapses["ctr_pt_position_z"],
-        )
-    )
-    select_synapses["segments"] = list(
-        zip(select_synapses["pre_pt_root_id"], select_synapses["post_pt_root_id"])
-    )
-
-    client = CAVEclient("minnie65_phase3_v1")
-    vs = ViewerState(client=client)
-    vs = vs.add_layers_from_client()
-    vs = vs.add_points(
-        select_synapses,
-        point_column="point",
-        segment_column="segments",
-        description_column="synapse_id",
-    )
-    vs.to_browser(shorten=True, browser="firefox")
-
 pre_target_info = (
-    pl.read_parquet(table_path / "pre_synapse_aggregation.parquet")
+    pl.read_parquet(DATA_PATH / "pre_synapse_aggregation.parquet")
     .to_pandas()
     .set_index("pre_pt_root_id")
 )
 pre_exc_target_info = (
-    pl.read_parquet(table_path / "pre_synapse_to_exc_aggregation.parquet")
+    pl.read_parquet(DATA_PATH / "pre_synapse_to_exc_aggregation.parquet")
     .to_pandas()
     .set_index("pre_pt_root_id")
 )
 pre_inh_target_info = (
-    pl.read_parquet(table_path / "pre_synapse_to_inh_aggregation.parquet")
+    pl.read_parquet(DATA_PATH / "pre_synapse_to_inh_aggregation.parquet")
     .to_pandas()
     .set_index("pre_pt_root_id")
 )
 post_target_info = (
-    pl.read_parquet(table_path / "post_synapse_aggregation.parquet")
+    pl.read_parquet(DATA_PATH / "post_synapse_aggregation.parquet")
     .to_pandas()
     .set_index("post_pt_root_id")
 )
@@ -153,74 +118,6 @@ column_info = proofread_info.query(
 
 # %%
 
-generate_link = False
-if generate_link:
-
-    from nglui.segmentprops import SegmentProperties
-    from nglui.statebuilder import ViewerState
-
-    seg_prop = SegmentProperties.from_dataframe(
-        column_info.reset_index(),
-        id_col="pt_root_id",
-        # label_col="cell_type",
-        number_cols=[
-            "pre_p_spine_synapse",
-            "pre_p_shaft_synapse",
-            "pre_p_soma_synapse",
-            "pre_p_spine_site_is_multi",
-            "pre_to_exc_p_spine_synapse",
-            "pre_to_exc_p_shaft_synapse",
-            "pre_to_exc_p_soma_synapse",
-            "pre_to_exc_p_spine_site_is_multi",
-            "post_p_spine_synapse",
-            "post_p_shaft_synapse",
-            "post_p_soma_synapse",
-            "post_p_spine_site_is_multi",
-        ],
-        # tag_bool_cols=["axon_cleaned"],
-    )
-    #
-    from caveclient import CAVEclient
-
-    client = CAVEclient("minnie65_public")
-
-    prop_id = client.state.upload_property_json(seg_prop.to_dict())
-
-    number_columns =  [
-        "pre_p_spine_synapse",
-        "pre_p_shaft_synapse",
-        "pre_p_soma_synapse",
-        "pre_p_spine_site_is_multi",
-        "pre_to_exc_p_spine_synapse",
-        "pre_to_exc_p_shaft_synapse",
-        "pre_to_exc_p_soma_synapse",
-        "pre_to_exc_p_spine_site_is_multi",
-        "post_p_spine_synapse",
-        "post_p_shaft_synapse",
-        "post_p_soma_synapse",
-        "post_p_spine_site_is_multi"
-    ]
-    label_column = 'cell_type'
-    id_column="pt_root_id"
-    all_columns = number_columns + [label_column] + [id_column]
-    cleaned_df = column_info.reset_index()[all_columns].copy()
-    cleaned_df[number_columns] = cleaned_df[number_columns].fillna(0)
-
-    vs = (
-        ViewerState(client=client)
-        .add_layers_from_client()
-        .add_segment_properties(
-            data=cleaned_df,
-            id_column=id_column,
-            number_columns=number_columns,
-            label_column=label_column
-        )
-    )
-    vs.to_browser(shorten=True)
-
-
-# %%
-# pl.read_parquet(table_path / "post_synapse_aggregation.parquet")
 top_line_numbers = post_target_info[
     [
         "post_spine_synapses",
@@ -245,10 +142,16 @@ save_variables(
     format="{:,d}",
 )
 
-#%%
+# %%
 
-counts_table = proofread_info.groupby("cell_type").agg({"cell_type":"count", "post_total_known_synapses":"sum", "pre_total_known_synapses":"sum"})
-counts_table.rename(columns={"cell_type":"n_cells"}, inplace=True)
+counts_table = proofread_info.groupby("cell_type").agg(
+    {
+        "cell_type": "count",
+        "post_total_known_synapses": "sum",
+        "pre_total_known_synapses": "sum",
+    }
+)
+counts_table.rename(columns={"cell_type": "n_cells"}, inplace=True)
 
 for col in counts_table.columns:
     save_variables(
@@ -371,11 +274,6 @@ posterior_excitatory = pd.Series(posterior_excitatory.reshape(-1), index=X.index
 cell_info["p_excitatory_lda"] = posterior_excitatory
 cell_info["uncertainty"] = np.abs(cell_info["p_excitatory_lda"] - 0.5) * 2
 
-# %% GET SOME EXAMPLE CELLS THAT CHANGED
-
-cell_info.query("broad_type_lda_prediction == 'inhibitory'").query(
-    "post_total_synapses > 1000"
-).sort_values("uncertainty", ascending=False).sample(100).index[:20]
 
 
 # %% COMPARE LDA SCORES FOR COLUMN VS WHOLE DATASET
@@ -1616,63 +1514,6 @@ save_variables(
     format="{:.1f}%", prefix=f"column_summary_{x}_", **broad_mean_data.to_dict()
 )
 
-# %%
-from scipy.stats import spearmanr
-
-cell_type = "5P-ET"
-data = mod_proofread_info.query("cell_type == @cell_type")
-max_spineyness = data["post_p_spine_synapse"].max()
-min_spineyness = data["post_p_spine_synapse"].min()
-save_variables(
-    prefix=f"column_summary_post_p_spine_synapse_{cell_type}_",
-    max=max_spineyness,
-    min=min_spineyness,
-    format="{:.1f}%",
-)
-
-y = "post_p_spine_synapse"
-y = "post_soma_synapses"
-y = "pre_mean_shaft_size"
-
-fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-
-sns.scatterplot(
-    data=data,
-    y=y,
-    x="post_p_spine_site_is_multi",
-    ax=ax,
-    s=10,
-)
-full_data = cell_info.query(
-    "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
-)
-
-sns.scatterplot(
-    data=full_data,
-    y=y,
-    x="post_p_spine_site_is_multi",
-    color="grey",
-    ax=ax,
-    zorder=-1,
-    s=5,
-)
-ax.set(xscale="log", yscale="log")
-
-xs = np.log(data[y])
-ys = np.log(data["post_p_spine_site_is_multi"])
-
-pearson_r, pearson_p = pearsonr(xs, ys)
-print(pearson_r)
-
-xs = np.log(full_data[y])
-ys = np.log(full_data["post_p_spine_site_is_multi"])
-
-pearson_r, pearson_p = pearsonr(xs, ys)
-print(pearson_r)
-
-# spearman_r, spearman_p = spearmanr(xs, ys)
-# print(spearman_r)
-
 # %% get median size of synapses by pre synaptic type and postsynaptic target
 medians = (
     all_pre_synapses.query("post_broad_type == 'excitatory'")
@@ -1711,8 +1552,7 @@ fig, axs, _ = sorted_stripplot_with_means(
 )
 ax = axs[1]
 ax.autoscale()
-ax.set(xscale="log")
-# ax.set(xlim=(200, 20000), xscale="log")
+ax.set(xlim=(200, 20000), xscale="log")
 save_matplotlib_figure(fig, "cell_type_input_spine_count", figure_out_path)
 
 # %% COUNT OF MULTI SPINE INPUTS BY CELL
@@ -1825,7 +1665,7 @@ data = cell_info.query(
 data = cell_info.query(
     "post_total_synapses >= 500 and (post_spine_synapses > 1) and (post_shaft_synapses > 1) and (broad_type == broad_type_lda_prediction)"
 )
-from meshrep import CELL_TYPE_CATEGORIES
+from analysis import CELL_TYPE_CATEGORIES
 
 print(CELL_TYPE_CATEGORIES)
 exc_categories = CELL_TYPE_CATEGORIES[1:8]
@@ -2905,117 +2745,117 @@ save_matplotlib_figure(
 )
 
 # %% CELL TYPE FOCUS COMPARISON TO MC INPUT COUNTS
-cell_type = "23P"
+# cell_type = "23P"
 
-x = "post_p_spine_site_is_multi"
-query_cell_info = (
-    cell_info.query(
-        "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
-    )
-    .sort_values(x, ascending=False)
-    .copy()
-)
+# x = "post_p_spine_site_is_multi"
+# query_cell_info = (
+#     cell_info.query(
+#         "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
+#     )
+#     .sort_values(x, ascending=False)
+#     .copy()
+# )
 
-query_synapses = column_column_synapses.query("post_cell_type == @cell_type")
+# query_synapses = column_column_synapses.query("post_cell_type == @cell_type")
 
-pre_type_counts = (
-    query_synapses.groupby(["post_pt_root_id", "pre_cell_type"]).size().unstack()
-)
-query_cell_info["bc_mc_ratio"] = pre_type_counts["BC"] / pre_type_counts["MC"]
-query_cell_info["mc_count"] = pre_type_counts["MC"]
-query_cell_info["bc_count"] = pre_type_counts["BC"]
+# pre_type_counts = (
+#     query_synapses.groupby(["post_pt_root_id", "pre_cell_type"]).size().unstack()
+# )
+# query_cell_info["bc_mc_ratio"] = pre_type_counts["BC"] / pre_type_counts["MC"]
+# query_cell_info["mc_count"] = pre_type_counts["MC"]
+# query_cell_info["bc_count"] = pre_type_counts["BC"]
 
-query_cell_info["mc_total_prop"] = pre_type_counts["MC"] / pre_type_counts.sum(axis=1)
-query_cell_info["bc_total_prop"] = pre_type_counts["BC"] / pre_type_counts.sum(axis=1)
+# query_cell_info["mc_total_prop"] = pre_type_counts["MC"] / pre_type_counts.sum(axis=1)
+# query_cell_info["bc_total_prop"] = pre_type_counts["BC"] / pre_type_counts.sum(axis=1)
 
-fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+# fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-sns.scatterplot(
-    data=query_cell_info,
-    x="mc_count",
-    y="post_p_spine_site_is_multi",
-    hue="mtype",
-    # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
-    hue_order=["L4a", "L4b", "L4c"],
-    legend=True,
-)
+# sns.scatterplot(
+#     data=query_cell_info,
+#     x="mc_count",
+#     y="post_p_spine_site_is_multi",
+#     hue="mtype",
+#     # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
+#     hue_order=["L4a", "L4b", "L4c"],
+#     legend=True,
+# )
+# # ax.set_xscale("log")
+# ax.set(
+#     xlabel="MC input count",
+#     ylabel="Proportion spines with multiple inputs",
+#     title="4P cells in column",
+# )
 # ax.set_xscale("log")
-ax.set(
-    xlabel="MC input count",
-    ylabel="Proportion spines with multiple inputs",
-    title="4P cells in column",
-)
-ax.set_xscale("log")
-ax.set_yscale("log")
+# ax.set_yscale("log")
 
 # %%
-cell_type = "5P-IT"
-query_cell_info = cell_info.query(
-    "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
-)
+# cell_type = "5P-IT"
+# query_cell_info = cell_info.query(
+#     "cell_type == @cell_type and broad_type == 'excitatory' and broad_type_lda_prediction == 'excitatory' and post_total_synapses > 1000"
+# )
 
-skel_info = (
-    pd.read_csv("neuron_skel_info.csv")
-    .set_index("root_id")
-    .drop(columns=["broad_type", "cell_type"])
-)
+# skel_info = (
+#     pd.read_csv("neuron_skel_info.csv")
+#     .set_index("root_id")
+#     .drop(columns=["broad_type", "cell_type"])
+# )
 
-y = "length_max_dist_to_tip_below_40um"
-x = "post_p_spine_site_is_multi"
-query_cell_info = (
-    query_cell_info.drop(columns=skel_info.columns, errors="ignore")
-    .join(skel_info, how="left")
-    .dropna(subset=[x, y])
-)
+# y = "length_max_dist_to_tip_below_40um"
+# x = "post_p_spine_site_is_multi"
+# query_cell_info = (
+#     query_cell_info.drop(columns=skel_info.columns, errors="ignore")
+#     .join(skel_info, how="left")
+#     .dropna(subset=[x, y])
+# )
 
-fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+# fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-sns.scatterplot(
-    data=query_cell_info,
-    x=x,
-    y=y,
-    # hue="mtype",
-    # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
-    # hue_order=["L4a", "L4b", "L4c"],
-    legend=True,
-    s=10,
-)
-ax.set(xscale="log", yscale="log")
+# sns.scatterplot(
+#     data=query_cell_info,
+#     x=x,
+#     y=y,
+#     # hue="mtype",
+#     # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
+#     # hue_order=["L4a", "L4b", "L4c"],
+#     legend=True,
+#     s=10,
+# )
+# ax.set(xscale="log", yscale="log")
 
-xs = np.log(query_cell_info[x].values)
-ys = np.log(query_cell_info[y].values)
-pearsonr(xs, ys)
+# xs = np.log(query_cell_info[x].values)
+# ys = np.log(query_cell_info[y].values)
+# pearsonr(xs, ys)
 
 # %% MULTI SPINE RATE CORRELATION WITH TIP LENGTH DISTRIBUTION
 
-sns.histplot(data=skel_info, x=y, log_scale=True, bins=40)
+# sns.histplot(data=skel_info, x=y, log_scale=True, bins=40)
 
 # %% TIP LENGTH DISTRIBUTION
 
 
 # %% INDEX WRITING (FOR INTERACTION WITH TIP STATS FILE)
 # use numpy savetxt to write to a csv
-np.savetxt(
-    "index.csv", query_cell_info.index.to_numpy().astype(int), delimiter=",", fmt="%d"
-)
+# np.savetxt(
+#     "index.csv", query_cell_info.index.to_numpy().astype(int), delimiter=",", fmt="%d"
+# )
 
 
 # %% P MULTI DISTRIBUTION BY MTYPE WITHIN CELL TYPE
-fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+# fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-sns.histplot(
-    data=query_cell_info,
-    x="post_p_spine_site_is_multi",
-    hue="mtype",
-    # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
-    hue_order=["L4a", "L4b", "L4c"],
-    legend=True,
-    log_scale=True,
-    element="step",
-    common_norm=False,
-    stat="density",
-)
-ax.set(xlabel="Proportion of spines\nwith multiple inputs")
+# sns.histplot(
+#     data=query_cell_info,
+#     x="post_p_spine_site_is_multi",
+#     hue="mtype",
+#     # hue_order=['L2a', "L2b", "L2c","L3a", "L3b"],
+#     hue_order=["L4a", "L4b", "L4c"],
+#     legend=True,
+#     log_scale=True,
+#     element="step",
+#     common_norm=False,
+#     stat="density",
+# )
+# ax.set(xlabel="Proportion of spines\nwith multiple inputs")
 
 # %% GET SOME EXAMPLE NEURONS WITH MANY MULTIS
 cell_type = "23P"
@@ -3072,40 +2912,40 @@ sns.histplot(
     # element="step",
 )
 # %% OUTPUT SPINE RATES
-cell_types = ["MC", "BC"]
+# cell_types = ["MC", "BC"]
 
-data = cell_info.query("cell_type.isin(@cell_types) and in_column")
+# data = cell_info.query("cell_type.isin(@cell_types) and in_column")
 
-x = "pre_p_spine_synapse"
+# x = "pre_p_spine_synapse"
 
-fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+# fig, ax = plt.subplots(1, 1, figsize=(6, 4))
 
-sns.histplot(
-    data=data,
-    x=x,
-    log_scale=True,
-    common_norm=False,
-    stat="proportion",
-    # bins=30,
-    # element="step",
-)
+# sns.histplot(
+#     data=data,
+#     x=x,
+#     log_scale=True,
+#     common_norm=False,
+#     stat="proportion",
+#     # bins=30,
+#     # element="step",
+# )
 # %%
-cell_types = ["MC"]
-data = cell_info.query("cell_type.isin(@cell_types) and in_column")
+# cell_types = ["MC"]
+# data = cell_info.query("cell_type.isin(@cell_types) and in_column")
 
-fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+# fig, ax = plt.subplots(1, 1, figsize=(6, 4))
 
-sns.scatterplot(
-    data=data,
-    x=x,
-    y="pt_position_um_y",
-    # log_scale=True,
-    # common_norm=False,
-    # stat="proportion",
-    # bins=30,
-    # element="step",
-)
-ax.set_xscale("log")
+# sns.scatterplot(
+#     data=data,
+#     x=x,
+#     y="pt_position_um_y",
+#     # log_scale=True,
+#     # common_norm=False,
+#     # stat="proportion",
+#     # bins=30,
+#     # element="step",
+# )
+# ax.set_xscale("log")
 
 
 # %% CELL P MULTI CORRELATION WITH OTHER FACTORS
@@ -3201,33 +3041,33 @@ save_matplotlib_figure(fig, "p_multi_correlations", figure_out_path)
 
 # %% CELL P MULTI EFFECT BY VISUAL AREA
 
-from scipy.stats import ks_2samp
+# from scipy.stats import ks_2samp
 
-hues = ["visual_area"]
-for hue in hues:
-    fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-    sns.histplot(
-        data=data,
-        x=x,
-        hue=hue,
-        hue_order=["V1", "RL", "AL"],
-        stat="density",
-        common_norm=False,
-        log_scale=True,
-        bins=40,
-        element="step",
-        fill=False,
-    )
+# hues = ["visual_area"]
+# for hue in hues:
+#     fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+#     sns.histplot(
+#         data=data,
+#         x=x,
+#         hue=hue,
+#         hue_order=["V1", "RL", "AL"],
+#         stat="density",
+#         common_norm=False,
+#         log_scale=True,
+#         bins=40,
+#         element="step",
+#         fill=False,
+#     )
 
-    for i, (group1, data1) in enumerate(data.groupby(hue)):
-        x1 = data1[x].values
-        for j, (group2, data2) in enumerate(data.groupby(hue)):
-            if j <= i:
-                continue
-            x2 = data2[x].values
+#     for i, (group1, data1) in enumerate(data.groupby(hue)):
+#         x1 = data1[x].values
+#         for j, (group2, data2) in enumerate(data.groupby(hue)):
+#             if j <= i:
+#                 continue
+#             x2 = data2[x].values
 
-            result = ks_2samp(x1, x2)
-            print(group1, group2, result.statistic, result.pvalue)
+#             result = ks_2samp(x1, x2)
+#             print(group1, group2, result.statistic, result.pvalue)
 
 
 # %% COMPUTE DELTA DEPTH (NEED TO REFACTOR)
@@ -3314,10 +3154,6 @@ def lineplot(data, y, ax):
     ax.set_xlabel("Proportion of \nspines with\nmultiple inputs")
     ax.set_xlim(0, ax.get_xlim()[1])
 
-
-from meshrep import TABLE_PATHS
-
-skeleton_extras = pl.read_delta(TABLE_PATHS["post_skeleton_extras"])
 
 
 figsize = (4.51, 7.17)
@@ -3526,14 +3362,7 @@ base_data = (
     .query("tag == 'spine'")
     .copy()
 )
-# base_data = base_data.join(
-#     skeleton_extras.select("synapse_id", "max_dist_to_tip")
-#     .to_pandas()
-#     .set_index("synapse_id")
-# )
 
-
-# base_data["post_max_dist_to_tip_um"] = base_data["max_dist_to_tip"] / 1000.0
 base_data["post_euc_distance_to_nuc_um"] = (
     base_data["post_euc_distance_to_nuc"] / 1000.0
 )
@@ -3827,32 +3656,6 @@ sns.histplot(
     stat="density",
     common_norm=False,
 )
-# %%
-fig, ax = plt.subplots(1, 1, figsize=(6, 6), sharex=True, layout="constrained")
-data = all_post_synapses.query("post_broad_type == 'excitatory'").copy()
-data["post_euc_distance_to_nuc_bin"] = pd.qcut(data["post_euc_distance_to_nuc"], q=100)
-data["post_euc_distance_to_nuc_bin_mid"] = (
-    data["post_euc_distance_to_nuc_bin"].apply(lambda x: x.mid).astype(float)
-)
-sns.scatterplot(
-    data=data,
-    x="post_euc_distance_to_nuc",
-    y="spine_size_nm3",
-    ax=ax,
-    s=0.5,
-    linewidth=0,
-    alpha=0.05,
-    color="grey",
-)
-sns.lineplot(
-    data=data,
-    x="post_euc_distance_to_nuc_bin_mid",
-    y="spine_size_nm3",
-    ax=ax,
-    color="black",
-    zorder=2,
-)
-ax.set(yscale="log", xlim=(0, 300_000))
 
 
 # %% GET PRE CONNECTIONS TABLE
@@ -3935,11 +3738,10 @@ X = pre_conn_vectors.values
 print(X.shape)
 
 from matplotlib import cm
+from analysis import CELL_TYPE_PALETTE
 from scipy.cluster.hierarchy import linkage
 from scipy.spatial.distance import squareform
 from sklearn.metrics import pairwise_distances
-
-from meshrep import CELL_TYPE_PALETTE
 
 conn_distances = pairwise_distances(X, metric="cosine")
 print(conn_distances.shape)
@@ -3979,41 +3781,41 @@ color_items
 
 
 # %%
-from sklearn.manifold import MDS, ClassicalMDS  # noqa
+# from sklearn.manifold import MDS, ClassicalMDS  # noqa
 
-projector = MDS(
-    dissimilarity="precomputed",
-    max_iter=1000,
-    init="classical_mds",
-    eps=1e-7,
-    n_components=2,
-    n_init=1,
-)
+# projector = MDS(
+#     dissimilarity="precomputed",
+#     max_iter=1000,
+#     init="classical_mds",
+#     eps=1e-7,
+#     n_components=2,
+#     n_init=1,
+# )
 
-# projector = ClassicalMDS(metric='precomputed')
-# projector = UMAP(metric='precomputed')
+# # projector = ClassicalMDS(metric='precomputed')
+# # projector = UMAP(metric='precomputed')
 
-data = column_cell_info.loc[layer_23P_cells].copy()
+# data = column_cell_info.loc[layer_23P_cells].copy()
 
-X = projector.fit_transform(conn_distances)
-print(X.shape)
-print(projector.n_components)
+# X = projector.fit_transform(conn_distances)
+# print(X.shape)
+# print(projector.n_components)
 
-data["MDS0"] = X[:, 0]
-data["MDS1"] = X[:, 1]
+# data["MDS0"] = X[:, 0]
+# data["MDS1"] = X[:, 1]
 
-fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+# fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-sns.scatterplot(
-    data=data,
-    x="MDS0",
-    y="MDS1",
-    hue="cell_type",
-    ax=ax,
-    palette="tab10",
-)
+# sns.scatterplot(
+#     data=data,
+#     x="MDS0",
+#     y="MDS1",
+#     hue="cell_type",
+#     ax=ax,
+#     palette="tab10",
+# )
 
-sns.move_legend(ax, bbox_to_anchor=(1, 1), loc="upper left")
+# sns.move_legend(ax, bbox_to_anchor=(1, 1), loc="upper left")
 
 
 # %%
@@ -4038,21 +3840,21 @@ multis = syns.groupby("spine_group_id").agg(
 )
 multis = multis.sort_values("ctr_pt_position_y")
 
-from caveclient import CAVEclient
-from nglui.statebuilder import ViewerState
+# from caveclient import CAVEclient
+# from nglui.statebuilder import ViewerState
 
-client = CAVEclient("minnie65_phase3_v1")
-vs = ViewerState(client=client)
-vs.add_layers_from_client()
-vs.add_segments([root_id])
-vs.add_segmentation_layer(vs.layers[-1].source, name="pre")
-vs.add_points(
-    data=multis,
-    point_column="ctr_pt_position",
-    segment_column="pre_pt_root_id",
-    linked_segmentation="pre",
-)
-vs.to_browser(browser="firefox")
+# client = CAVEclient("minnie65_phase3_v1")
+# vs = ViewerState(client=client)
+# vs.add_layers_from_client()
+# vs.add_segments([root_id])
+# vs.add_segmentation_layer(vs.layers[-1].source, name="pre")
+# vs.add_points(
+#     data=multis,
+#     point_column="ctr_pt_position",
+#     segment_column="pre_pt_root_id",
+#     linked_segmentation="pre",
+# )
+# vs.to_browser(browser="firefox")
 
 # %% LOOK AT P MULTI AS A FUNCTION OF SPATIAL FACTORS BUT FOR INDIVIDUAL CELLS
 # data = all_pre_synapses.query('post_broad_type == "excitatory"').query("tag == 'spine'")
@@ -4408,9 +4210,7 @@ fig.suptitle(suptitle, y=1.05)
 
 # %% LOAD AND PREPARE SPINE TABLE DATA
 
-spine_table = pl.scan_parquet(
-    str(DATA_PATH / "filtered_spine_info.parquet")
-)
+spine_table = pl.scan_parquet(str(DATA_PATH / "filtered_spine_info.parquet"))
 # drop all columns that have "hks" in the name
 spine_table = spine_table.drop(
     pl.selectors.contains("min_"), pl.selectors.contains("max_")
@@ -6995,7 +6795,6 @@ sns.scatterplot(
     # label="Verified multi spine",
 )
 ax.set(xscale="log", yscale="log")
-
 pearson_r, pearson_p = pearsonr(subdata[x], subdata[y])
 spearman_rho, spearman_p = spearmanr(subdata[x], subdata[y])
 ax.text(
@@ -7549,158 +7348,3 @@ plot_upset_indicators(
 )
 
 
-# %% OLD VERSION OF PLOT OF CELLS BY TYPE AND DEPTH
-
-
-plot_proofread_info = (
-    proofread_info.sort_values(["broad_type", "cell_type", "pt_position_y"])
-    .query("broad_type.isin(['thalamic', 'excitatory','inhibitory'])")
-    .query("cell_type.notna()")
-    .copy()
-)
-
-
-# plot_proofread_info = plot_proofread_info.query('broad_type == "excitatory"')
-plot_cols = [
-    # "pt_position_y",
-    # post
-    # "post_total_synapses",
-    # "post_soma_synapses",
-    # "post_shaft_synapses",
-    # "post_spine_synapses",
-    # "post_single_spine_synapses",
-    # "post_multi_spine_synapses",
-    # "post_multi_spine_sites",
-    # "post_shaft_sum_size",
-    # "post_soma_sum_size",
-    # "post_spine_sum_size",
-    # "post_unknown_sum_size",
-    # "post_p_soma_synapse",
-    # "post_p_shaft_synapse",
-    # "post_p_spine_synapse",
-    # "post_p_spine_synapse_is_multi",
-    # "post_p_spine_site_is_multi",
-    "pre_p_soma_synapse",
-    "pre_p_shaft_synapse",
-    "pre_p_spine_synapse",
-    "pre_p_spine_site_is_multi",
-    # "post_shaft_p_sum_size",
-    # "post_soma_p_sum_size",
-    # "post_spine_p_sum_size",
-    # "post_spine_shaft_ratio",
-    # "post_mean_multi_spine_inputs",
-    # "post_mean_spine_inputs",
-    # pre
-    # "pre_total_synapses",
-    # "pre_soma_synapses",
-    # "pre_shaft_synapses",
-    # "pre_spine_synapses",
-    # "pre_single_spine_synapses",
-    # "pre_multi_spine_synapses",
-    # "pre_multi_spine_sites",
-    # "pre_p_soma_synapse",
-    # "pre_p_shaft_synapse",
-    # "pre_p_spine_synapse",
-    # "pre_p_spine_site_is_multi",
-    # "pre_p_unknown_synapse",
-    # "pre_spine_shaft_ratio",
-]
-
-
-n_cols = len(plot_cols)
-
-fig, axs = plt.subplots(
-    n_cols,
-    1,
-    figsize=(15, 1.5 * n_cols),
-    # sharex="col",
-    sharey="row",
-    layout="constrained",
-    # gridspec_kw={"width_ratios": [1, 0.1]},
-)
-
-grouping = "cell_type"
-match grouping:
-    case "mtype":
-        palette = load_mtype_palette()
-        palette["TH"] = CELL_TYPE_PALETTE["TH"]
-        palette["Th"] = CELL_TYPE_PALETTE["TH"]
-        palette["thalamic"] = CELL_TYPE_PALETTE["TH"]
-        palette["Unk"] = "#212121"
-    case "cell_type":
-        palette = CELL_TYPE_PALETTE
-        palette["Unk"] = "#212121"
-        palette["unknown"] = "#212121"
-    case _:
-        raise ValueError(f"Unknown grouping: {grouping}")
-
-plot_proofread_info = plot_proofread_info.sort_values(
-    [grouping, "pt_position_y"], ascending=[True, False]
-)
-
-plot_proofread_info["index"] = np.arange(len(plot_proofread_info))
-plot_proofread_info["mean_index"] = plot_proofread_info.groupby("mtype")[
-    "index"
-].transform("mean")
-
-
-for i, col in enumerate(plot_cols):
-    ax = axs[i]
-    sns.scatterplot(
-        data=plot_proofread_info,
-        x="index",
-        y=col,
-        hue=grouping,
-        palette=palette,
-        size="pre_total_synapses",
-        sizes=(1.5, 40),
-        linewidth=0.2,
-        edgecolor="black",
-        ax=ax,
-        legend=False,
-    )
-
-    if col == "pt_position_y":
-        ax.invert_yaxis()
-    ax.set_ylabel(col)
-    ax.set_xlabel("")
-    ax.set_xticks([])
-    ax.yaxis.label.set_rotation(0)
-    ax.yaxis.label.set_ha("right")
-    if "ratio" in col:
-        ax.set_yscale("log")
-        ax.axhline(1, color="black", linestyle="--", linewidth=1)
-
-    firsts = plot_proofread_info.groupby(grouping).nth(0)
-    lasts = plot_proofread_info.groupby(grouping).nth(-1)
-    for first_idx, last_idx in zip(firsts.index, lasts.index):
-        x_start = plot_proofread_info.index.get_loc(first_idx)
-        x_end = plot_proofread_info.index.get_loc(last_idx)
-        ax.autoscale(False)
-        ax.fill_betweenx(
-            [ax.get_ylim()[0], ax.get_ylim()[1]],
-            x_start,
-            x_end,
-            color=palette[plot_proofread_info.loc[first_idx, grouping]],
-            linewidth=0,
-            alpha=0.2,
-            label=plot_proofread_info.loc[first_idx, grouping],
-            zorder=-2,
-        )
-        mid = (x_start + x_end) / 2
-        if i == 0:
-            ax.text(
-                mid,
-                ax.get_ylim()[1] + 0.05 * (ax.get_ylim()[1] - ax.get_ylim()[0]),
-                plot_proofread_info.loc[first_idx, grouping],
-                ha="left",
-                va="bottom",
-                fontsize=10,
-                color=palette[plot_proofread_info.loc[first_idx, grouping]],
-                rotation=45,
-            )
-
-    ax.set_xlim(-0.5, len(plot_proofread_info) + 0.5)
-
-
-save_matplotlib_figure(fig, "column_mega_fig_by_mtype", figure_out_path)
