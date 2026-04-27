@@ -10,6 +10,9 @@ We use [`uv`](https://docs.astral.sh/uv/) for dependency management (note that t
 
 Dependencies are listed in `pyproject.toml`. Create a new environment and install all of them by navigating to this repo and then running `uv sync`.
 
+You may also need to set up CAVEclient access if you have not used MICrONS on your 
+computer. Follow the instructions [here](https://tutorial.microns-explorer.org/quickstart_notebooks/01-caveclient-setup.html) (this should only need to happen once).
+
 ## Running the code
 
 Currently there is only one mega-script in `./scripts`. Running it will generate many
