@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -19,7 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 DATA_PATH = PROJECT_ROOT / "data"
 FIG_PATH = PROJECT_ROOT / "figures"
+FONT_PATH = Path(matplotlib.get_data_path()) / "fonts" / "ttf" / "DejaVuSans.ttf"
 MESH_DATA_PATH = DATA_PATH / "computed_mesh_data"
+MODEL_PATH = DATA_PATH / "models"
 
 
 def param_name(**kwargs):
@@ -360,8 +363,7 @@ def save_matplotlib_figure(
 
 
 def load_model(model_name):
-    path = Path(__file__).parent.parent.parent / "models" / f"{model_name}.pkl"
-    return load(path)
+    return load(MODEL_PATH / f"{model_name}.joblib")
 
 
 def _read_root_synapses(root_id: int, side="post", version=1412) -> pd.DataFrame:

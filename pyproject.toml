@@ -12,6 +12,7 @@ dependencies = [
     "humanize>=4.15.0",
     "ipykernel>=7.2.0",
     "ipywidgets>=8.1.8",
+    "meshmash",
     "nglui>=4.7.2",
     "pandas>=2.3.3",
     "polars>=1.39.3",
@@ -30,3 +31,11 @@ analysis = "analysis:main"
 [build-system]
 requires = ["uv_build>=0.11.3,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv.workspace]
+members = [
+    "submodules/meshmash",
+]
+
+[tool.uv.sources]
+meshmash = { workspace = true, editable = true }

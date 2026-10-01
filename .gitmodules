@@ -1,0 +1,3 @@
+[submodule "meshmash"]
+	path = submodules/meshmash
+	url = https://github.com/bdpedigo/meshmash.git
