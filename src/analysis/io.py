@@ -1,6 +1,7 @@
 import hashlib
 import os
 import shutil
+from functools import wraps
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import polars as pl
 import pyvista as pv
 from caveclient import CAVEclient
 from joblib import Parallel, delayed, load
@@ -458,24 +460,54 @@ LABEL_DETAILED_CATEGORIES = [
 
 COMPARTMENT_CATEGORIES = ["axon", "dendrite", "perisoma", "unknown"]
 
-TABLE_CACHE_PATH = DATA_PATH / "table_cache"
+TABLE_PATH = DATA_PATH / "tables"
+
+
+def cache_table(name: str):
+    """Decorator caching a wrapped function's DataFrame result as parquet under TABLE_PATH/v{version}."""
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, version=VERSION, **kwargs):
+            path = TABLE_PATH / f"v{version}" / f"{name}.parquet"
+            if path.exists():
+                return pl.read_parquet(path)
+
+            df = func(*args, version=version, **kwargs)
+            if isinstance(df, pd.DataFrame):
+                df = pl.from_pandas(df)
+
+            path.parent.mkdir(parents=True, exist_ok=True)
+            df.write_parquet(path, compression="snappy")
+            return df
+
+        return wrapper
+
+    return decorator
 
 
 def _get_client(version=VERSION):
     return CAVEclient("minnie65_public", version=version)
 
 
+@cache_table("aibs_cell_info")
+def _fetch_aibs_cell_info(version=VERSION, **query_args):
+    client = _get_client(version=version)
+    return client.materialize.query_view("aibs_cell_info", **query_args)
+
+
+@cache_table("proofreading_status_and_strategy")
+def _fetch_proofreading_table(version=VERSION, **query_args):
+    client = _get_client(version=version)
+    return client.materialize.tables.proofreading_status_and_strategy().query(
+        **query_args
+    )
+
+
 def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=True):
     query_args = dict(desired_resolution=[1, 1, 1], split_positions=True)
 
-    table_path = DATA_PATH / f"v{version}-aibs_cell_info.csv.gz"
-    if table_path.exists():
-        cell_info = pd.read_csv(table_path, index_col=0)
-    else:
-        client = _get_client(version=version)
-        cell_info = client.materialize.query_view("aibs_cell_info", **query_args)
-        table_path.parent.mkdir(parents=True, exist_ok=True)
-        cell_info.to_csv(table_path)
+    cell_info = _fetch_aibs_cell_info(version=version, **query_args).to_pandas()
 
     cell_info.drop_duplicates("pt_root_id", keep=False, inplace=True)
     cell_info.set_index("pt_root_id", inplace=True)
@@ -488,20 +520,9 @@ def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=Tru
         )
 
     if add_thalamic:
-        proofreading_path = (
-            DATA_PATH / f"v{version}-proofreading_status_and_strategy.csv.gz"
-        )
-        if proofreading_path.exists():
-            proofreading_table = pd.read_csv(proofreading_path, index_col=0)
-        else:
-            client = _get_client(version=version)
-            proofreading_table = (
-                client.materialize.tables.proofreading_status_and_strategy().query(
-                    **query_args
-                )
-            )
-            proofreading_path.parent.mkdir(parents=True, exist_ok=True)
-            proofreading_table.to_csv(proofreading_path)
+        proofreading_table = _fetch_proofreading_table(
+            version=version, **query_args
+        ).to_pandas()
 
         thalamic_table = proofreading_table.query("status_dendrite=='f'").query(
             "strategy_dendrite=='none'"

@@ -23,6 +23,7 @@ from .io import (
     MTYPE_CATEGORIES,
     PROJECT_ROOT,
     VERSION,
+    VERSION_TIMESTAMP,
     load_model,
     load_neuron_info,
     load_signatures,
@@ -123,4 +124,9 @@ __all__ = [
     "set_up_camera",
     "pca2d_to_colors",
     "pca3d_to_colors",
+    "VERSION_TIMESTAMP",
+    "VERSION",
+    "DATA_PATH",
+    "TABLE_PATH",
+    "PROJECT_ROOT",
 ]
