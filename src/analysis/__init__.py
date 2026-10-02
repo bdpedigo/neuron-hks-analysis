@@ -22,6 +22,7 @@ from .io import (
     MODEL_PATH,
     MTYPE_CATEGORIES,
     PROJECT_ROOT,
+    VERSION,
     load_model,
     load_neuron_info,
     load_signatures,

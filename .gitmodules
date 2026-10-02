@@ -1,3 +1,6 @@
 [submodule "meshmash"]
 	path = submodules/meshmash
 	url = https://github.com/bdpedigo/meshmash.git
+[submodule "submodules/panel_mosaic"]
+	path = submodules/panel_mosaic
+	url = https://github.com/bdpedigo/panel_mosaic.git

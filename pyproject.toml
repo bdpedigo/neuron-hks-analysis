@@ -15,6 +15,7 @@ dependencies = [
     "meshmash",
     "nglui>=4.7.2",
     "pandas>=2.3.3",
+    "panel-mosaic",
     "polars>=1.39.3",
     "pyvista[all]>=0.47.3",
     "pywaffle>=1.1.1",
@@ -35,7 +36,9 @@ build-backend = "uv_build"
 [tool.uv.workspace]
 members = [
     "submodules/meshmash",
+    "submodules/panel_mosaic",
 ]
 
 [tool.uv.sources]
 meshmash = { workspace = true, editable = true }
+panel-mosaic = { workspace = true, editable = true }

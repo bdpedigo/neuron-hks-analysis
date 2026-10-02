@@ -1,12 +1,24 @@
 # %%
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pyvista as pv
 import seaborn as sns
 from caveclient import CAVEclient
 from fast_simplification import simplify
+from matplotlib import colormaps
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
+from meshmash import (
+    MeshStitcher,
+    agglomerate_mesh,
+    compute_hks,
+    shuffle_label_mapping,
+    spectral_geometry_filter,
+)
+from panel_mosaic import PanelMosaic
 
-from meshmash import MeshStitcher
 from analysis import (
     COMPARTMENT_PALETTE_MUTED_HEX,
     FIG_PATH,
@@ -19,7 +31,6 @@ from analysis import (
     set_pyvista_theme,
 )
 
-# COMPARTMENT_PALETTE["shaft"] = (221, 205, 37)
 font_file = FONT_PATH
 
 figure_out_path = FIG_PATH / "explain_pipeline"
@@ -34,6 +45,29 @@ query_kwargs = {
     "split_positions": True,
     "log_warning": False,
 }
+
+cpos1 = [
+    (690532.8424083234, 519634.5831712736, 878074.5599839322),
+    (699562.9880630554, 515132.88803256705, 889345.9762878821),
+    (0.10495369363765703, -0.8917289123226668, -0.44023206280284355),
+]
+cpos2 = [
+    (691673.2824964552, 505369.27117339516, 905212.8317382315),
+    (690760.625297867, 502177.7451042422, 896293.809805252),
+    (-0.8978140554931682, 0.4356941523220054, -0.06403536047622342),
+]
+cpos3 = [
+    (691950.9583624994, 500231.76529024437, 884896.4950618432),
+    (692935.685593285, 506349.5209391108, 894429.3798137115),
+    (0.9590183311048961, -0.27293547159452947, 0.0760925025889659),
+]
+cpos5 = [
+    (687534.3121194638, 507134.3830310004, 907036.5741242096),
+    (691021.5197133131, 501929.8393810764, 895942.1087349937),
+    (-0.8718083448560751, 0.2770312428408315, -0.40398502488257576),
+]
+
+cpos = cpos3
 
 # %%
 
@@ -89,14 +123,21 @@ plotter.camera_position = [
     (797608.4761118466, 376719.4115159685, 849445.1221647501),
     (0.6724925787645127, -0.5171395794948519, 0.5294529127566905),
 ]
-plotter.show(jupyter_backend="static")
-
+plotter.camera_position = cpos
+plotter.camera_position = [
+    (693989.7152591199, 505345.7094142076, 889785.6072208692),
+    (694613.3971637692, 507585.2429081523, 893363.4222122625),
+    (0.9544426223112032, -0.2977246344442238, 0.019983061846656134),
+]
+# plotter.show(jupyter_backend="static")
+# plotter.show()
 save_pyvista_figure(
     plotter,
     filename="mesh_simplification",
     out_path=figure_out_path,
     formats=["svg", "png"],
     scale=5,
+    show=True
 )
 # %%
 
@@ -163,8 +204,6 @@ save_pyvista_figure(
 )
 # %%
 
-from meshmash import spectral_geometry_filter
-
 font_size = 20
 
 i = 5
@@ -197,7 +236,6 @@ plotter.camera_position = [
 ]
 plotter.zoom_camera(1.5)
 plotter.enable_fly_to_right_click()
-# plotter.show(jupyter_backend="static")
 plotter.show()
 save_pyvista_figure(
     plotter,
@@ -206,7 +244,55 @@ save_pyvista_figure(
     formats=["svg", "png"],
     scale=5,
 )
+# %%
+select_evals = [5, 31, -50]
+select_evals = [5, 31, -1400]
+n_evals = len(select_evals)
+window_size = np.floor(np.array((8.04, 5.83)) * 100).astype(int)
+plotter = pv.Plotter(shape=(n_evals, 1), window_size=window_size, border_color="white")
 
+cpos4 = [
+    (669445.9697108954, 504979.9262651722, 882766.5465656943),
+    (692935.685593285, 506349.5209391108, 894429.3798137115),
+    (0.39907005177099764, -0.5411461701524402, -0.7402053203732325),
+]
+for i, k in enumerate(select_evals):
+    x = evecs[:, k]
+    clim = max(np.abs(np.percentile(x, (1, 99))))
+    plotter.subplot(i, 0)
+    plotter.add_mesh(
+        pv.make_tri_mesh(*submesh),
+        scalars=evecs[:, k],
+        cmap="coolwarm",
+        clim=[-clim, clim],
+    )
+    # plotter.add_text(f"Eigenvector {k}", font_file=font_file, font_size=font_size)
+
+
+plotter.link_views()
+# plotter.camera_position = [
+#     (734932.8126930452, 504203.72146433586, 909203.0301436597),
+#     (722542.4866154874, 541726.2457023762, 888787.3015576294),
+#     (-0.5385994521805743, 0.2584761308601863, 0.8019356083167358),
+# ]
+
+plotter.camera_position = cpos
+plotter.camera_position = [
+    (693691.4351564733, 500428.835000885, 885687.2010647365),
+    (692935.685593285, 506349.5209391108, 894429.3798137115),
+    (0.9171912528176493, -0.28858419282194975, 0.2747350895100485),
+]
+plotter.zoom_camera(1.2)
+plotter.enable_fly_to_right_click()
+plotter.show()
+save_pyvista_figure(
+    plotter,
+    filename="mesh_eigenvectors",
+    out_path=figure_out_path,
+    formats=["svg", "png"],
+    scale=5,
+    show=True,
+)
 
 # %%
 
@@ -218,7 +304,6 @@ node_index = 8964
 
 times = [0, 1e6, 1e7, 1e8]
 
-# plotter = pv.Plotter(shape=(1, len(times)), window_size=(2000, 1000))
 eff_dpi = 100
 window_size = (eff_dpi * np.array((13.37, 7.92))).astype(int)
 window_size = (eff_dpi * np.array((15.36, 7.92))).astype(int)
@@ -304,7 +389,6 @@ for i, t in enumerate(times):
         scalars=x,
         cmap="Reds",
         clim=[-20, -14],
-        # clim=clim,
     )
 
     if text:
@@ -322,7 +406,6 @@ plotter.camera_position = [
     (700866.8937209327, 516762.87477289204, 889591.9275506003),
     (-0.8038888428426355, -0.5841211241460463, -0.11209478435452733),
 ]
-# plotter.camera.zoom(1.75)
 
 plotter.show(jupyter_backend="static")
 save_pyvista_figure(
@@ -333,32 +416,18 @@ save_pyvista_figure(
     scale=5,
 )
 
-# %%
 
-
-plotter = pv.Plotter(window_size=[300, 600])
-
-mesh_poly = pv.make_tri_mesh(*submesh)
-sample_indices = np.random.choice(len(submesh[0]), size=5000, replace=False)
-plotter.add_mesh(pv.make_tri_mesh(*submesh), color="lightgrey")
-plotter.add_points(
-    submesh[0][sample_indices],
-    color="black",
-    render_points_as_spheres=True,
-    point_size=5,
-)
-
-plotter.camera_position = [
-    (707408.532850284, 503900.38123590423, 909704.4018922036),
-    (700866.8937209327, 516762.87477289204, 889591.9275506003),
-    (-0.8038888428426355, -0.5841211241460463, -0.11209478435452733),
-]
-plotter.show(jupyter_backend="static")
 # %%
 window_size = np.floor(np.array((8.04, 5.83)) * 100).astype(int)
 
+
+focal_point = cpos[1]
+
+node_index = np.argmin(np.linalg.norm(submesh[0] - focal_point, axis=1))
+# node_index += 245
+
 t = 1e6
-node_index = 8965
+
 coefs = np.exp(-t * evals)
 out = (evecs[node_index, :] * coefs) @ evecs.T
 out[out < 0] = 1e-12
@@ -383,29 +452,145 @@ plotter.add_mesh(
     cmap="Reds",
     clim=[-20, -14],
 )
-plotter.camera_position = [
-    (690532.8424083234, 519634.5831712736, 878074.5599839322),
-    (699562.9880630554, 515132.88803256705, 889345.9762878821),
-    (0.10495369363765703, -0.8917289123226668, -0.44023206280284355),
-]
-# plotter.show()
+
+plotter.camera_position = cpos
 save_pyvista_figure(
     plotter,
     filename="single_heat",
     out_path=figure_out_path,
     formats=["svg", "png"],
     scale=5,
+    show=True,
+)
+
+
+# %%
+
+
+chks_params = {
+    "drop_first": True,
+    "max_eigenvalue": 1e-05,
+    "mollify_factor": 1e-05,
+    "n_components": 32,
+    "robust": True,
+    "t_max": 20000000.0,
+    "t_min": 50000.0,
+    "truncate_extra": True,
+}
+features = compute_hks(submesh, **chks_params)
+
+labels = agglomerate_mesh(submesh, np.log(features), distance_thresholds=3.0).squeeze()
+
+labels = shuffle_label_mapping(labels)
+
+# %%
+
+plotter = pv.Plotter(window_size=window_size)
+colors = sns.color_palette("husl", np.max(labels) + 1).as_hex()
+plotter.add_mesh(
+    pv.make_tri_mesh(*submesh),
+    scalars=labels,
+    cmap=colors,
+    interpolate_before_map=False,
+    show_edges=False,
+)
+plotter.camera_position = cpos
+
+
+# plotter.enable_fly_to_right_click()
+# plotter.show(jupyter_backend="static")
+
+save_pyvista_figure(
+    plotter,
+    filename="agglomeration",
+    out_path=figure_out_path,
+    formats=["svg", "png"],
+    scale=5,
+    show=True,
 )
 
 # %%
 
-import os
+VERSION = 1412
+N_JOBS = -1
+VERBOSE = True
+PARAMETER_NAME = "absolute-solo-yak"
+DATASTACK = "minnie65_phase3_v1"
+N_PER_BATCH = 1000
 
-os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:$DYLD_LIBRARY_PATH"
+model = load_model("simple_hks_model")
 
-from matplotlib import patheffects as pe
+mean_features = pd.DataFrame(features).groupby(by=labels).mean().values
+posteriors = model.predict_proba(np.log(mean_features))
+posteriors = posteriors[labels]
+plotter = pv.Plotter(window_size=window_size)
+plotter.add_mesh(
+    pv.make_tri_mesh(*submesh),
+    scalars=posteriors[:, 1] > 0.5,
+    interpolate_before_map=False,
+    cmap=[
+        COMPARTMENT_PALETTE_MUTED_HEX["shaft"],
+        COMPARTMENT_PALETTE_MUTED_HEX["spine"],
+    ],
+    show_edges=False,
+)
+plotter.camera_position = cpos
 
-from panel_mosaic import PanelMosaic
+#  [
+#     (691950.9583624994, 500231.76529024437, 884896.4950618432),
+#     (692935.685593285, 506349.5209391108, 894429.3798137115),
+#     (0.9590183311048961, -0.27293547159452947, 0.0760925025889659),
+# ]
+plotter.enable_fly_to_right_click()
+
+plotter.show(jupyter_backend="static")
+
+save_pyvista_figure(
+    plotter,
+    filename="classification",
+    out_path=figure_out_path,
+    formats=["svg", "png"],
+    scale=5,
+)
+
+# %%
+# base_size = (8.04, 5.83)
+
+# window_size = np.floor(np.array(base_size) * 100).astype(int)
+plotter = pv.Plotter(shape=(2, 1), border_color="white", window_size=window_size)
+
+mesh_params = dict(
+    color="darkgrey",
+    show_edges=True,
+    edge_color="black",
+    line_width=15,
+)
+
+plotter.subplot(0, 0)
+plotter.add_mesh(pv.make_tri_mesh(*submesh), **mesh_params)
+
+
+plotter.subplot(1, 0)
+plotter.add_mesh(pv.make_tri_mesh(*simple_mesh), **mesh_params)
+
+plotter.link_views()
+# plotter.camera_position = [
+#     (793529.5368801871, 376050.93514928065, 853973.1183615582),
+#     (797608.4761118466, 376719.4115159685, 849445.1221647501),
+#     (0.6724925787645127, -0.5171395794948519, 0.5294529127566905),
+# ]
+plotter.camera_position = cpos
+plotter.show(jupyter_backend="static")
+
+save_pyvista_figure(
+    plotter,
+    filename="mesh_simplification",
+    out_path=figure_out_path,
+    formats=["svg", "png"],
+    scale=5,
+)
+
+# %%
 
 mosaic = """
 AABBCC
@@ -452,51 +637,9 @@ for label in label_mapping.keys():
 
 ax = pm.axs["A"]
 
-# set background color to light grey
-# ax.set_facecolor("lightgrey")
-# from matplotlib.patches import FancyBboxPatch, Rectangle
-
 pm.lock_axes()
 pm.show()
-# ax.autoscale(False)
-# rect = Rectangle(
-#     (0, 0),
-#     1.15,
-#     1.15,
-#     facecolor="lightgrey",
-#     clip_on=False,
-#     zorder=-1,
-# )
-# rect = FancyBboxPatch(
-#     (-0.05, -0.05),
-#     1.15,
-#     1.15,
-#     boxstyle="round,pad=0.02,rounding_size=0.05",
-#     facecolor="lightgrey",
-#     clip_on=False,
-#     zorder=-1,
-# )
-# ax.add_patch(rect)
 
-# pm.lock_axes()
-
-# draw arrows between panels
-# for ax in axs.values():
-#     ax.annotate(
-#         "",
-#         xy=(1.2, 0.5),
-#         xytext=(0.5, 0.5),
-#         textcoords="axes fraction",
-#         arrowprops=dict(
-#             facecolor="black", arrowstyle="-|>", lw=2, transform=ax.transAxes
-#         ),
-#         horizontalalignment="center",
-#         verticalalignment="center",
-#         clip_on=True,
-#     )
-#
-# pm.show_dummies()
-# plt.show()
 
 # %%
 
@@ -509,7 +652,7 @@ label_mapping = {
     "A": "Mesh simplification",
     "B": "Mesh subdivision",
     "C": "Eigendecomposition",
-    "D": "Heat kernel computation",
+    "D": "Diffused feature generation",
     "E": "Feature agglomeration",
     "F": "Classification",
 }
@@ -550,55 +693,8 @@ pm.write(
     figure_out_path / "explain_pipeline_mosaic_simple",
 )
 
-# %%
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-
-# mpl.rcParams["font.size"] = 20
-mpl.rcParams["text.usetex"] = False
-mpl.rcParams["text.latex.preamble"] = r"\usepackage{{amsmath}}"
-
-fig, ax = plt.subplots(1, 1, figsize=(7.43 / 2, 7.92))
-
-
-def draw_bracket(ax, start, end, axis="x", color="black"):
-    lx = np.linspace(-np.pi / 2.0 + 0.05, np.pi / 2.0 - 0.05, 500)
-    tan = np.tan(lx)
-    curve = np.hstack((tan[::-1], tan))
-    x = np.linspace(start, end, 1000)
-    if axis == "x":
-        ax.plot(x, -curve, color=color)
-    elif axis == "y":
-        ax.plot(-curve / 200 + 0.1, x, color=color)
-
-
-draw_bracket(ax, 0, 1, axis="y")
-
-ax.set_xlim(0, 1)
-ax.set_ylim(0, 1)
-
-# ax.text(0.6, 0.6, r"$\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}$")
 
 # %%
-
-# poly = pv.make_tri_mesh(submesh[0].astype(np.float32), submesh[1].astype(np.int32))
-# poly['evec'] = evecs[:, 1].astype(np.float32)
-# poly.save("evec1.vtk", binary=False)
-
-# from meshio import Mesh
-
-# m = Mesh(
-#     points=submesh[0].astype(np.float32),
-#     cells={"triangle": submesh[1].astype(np.int32)},
-# )
-# m.write("evec1.vtk", binary=False)
-
-
-# %%
-import matplotlib.pyplot as plt
-from matplotlib import colormaps
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
 
 cmap_name = "Reds"
 cmap = colormaps[cmap_name]
@@ -606,9 +702,6 @@ norm = Normalize(vmin=-20, vmax=-14)
 sm = ScalarMappable(norm=norm, cmap=cmap)
 
 
-# times = (
-#     [0] + np.geomspace(1e6, 1e7, 10).tolist() + np.geomspace(1e7, 1e8, 10).tolist()[1:]
-# )
 times = [0] + np.geomspace(1e5, 1e8, 20).tolist()
 times = np.array(times)
 
@@ -698,252 +791,3 @@ save_matplotlib_figure(
     out_path=figure_out_path,
     formats=["svg", "png"],
 )
-
-# %%
-from meshmash import compute_hks
-
-
-# %%
-
-
-chks_params = {
-    "drop_first": True,
-    "max_eigenvalue": 1e-05,
-    "mollify_factor": 1e-05,
-    "n_components": 32,
-    "robust": True,
-    "t_max": 20000000.0,
-    "t_min": 50000.0,
-    "truncate_extra": True,
-}
-features = compute_hks(submesh, **chks_params)
-
-# %%
-from meshmash import agglomerate_mesh, shuffle_label_mapping
-
-labels = agglomerate_mesh(submesh, np.log(features), distance_thresholds=3.0).squeeze()
-
-labels = shuffle_label_mapping(labels)
-
-# %%
-
-plotter = pv.Plotter(window_size=window_size)
-colors = sns.color_palette("husl", np.max(labels) + 1).as_hex()
-plotter.add_mesh(
-    pv.make_tri_mesh(*submesh),
-    scalars=labels,
-    cmap=colors,
-    interpolate_before_map=False,
-    show_edges=False,
-)
-plotter.camera_position = [
-    (691673.2824964552, 505369.27117339516, 905212.8317382315),
-    (690760.625297867, 502177.7451042422, 896293.809805252),
-    (-0.8978140554931682, 0.4356941523220054, -0.06403536047622342),
-]
-plotter.enable_fly_to_right_click()
-plotter.show(jupyter_backend="static")
-# plotter.show()
-
-save_pyvista_figure(
-    plotter,
-    filename="agglomeration",
-    out_path=figure_out_path,
-    formats=["svg", "png"],
-    scale=5,
-)
-
-# %%
-
-VERSION = 1412
-N_JOBS = -1
-VERBOSE = True
-PARAMETER_NAME = "absolute-solo-yak"
-DATASTACK = "minnie65_phase3_v1"
-N_PER_BATCH = 1000
-
-model = load_model("simple_hks_model")
-
-# %%
-import pandas as pd
-
-mean_features = pd.DataFrame(features).groupby(by=labels).mean().values
-posteriors = model.predict_proba(np.log(mean_features))
-posteriors = posteriors[labels]
-plotter = pv.Plotter(window_size=window_size)
-plotter.add_mesh(
-    pv.make_tri_mesh(*submesh),
-    scalars=posteriors[:, 1] > 0.5,
-    interpolate_before_map=False,
-    cmap=[
-        COMPARTMENT_PALETTE_MUTED_HEX["shaft"],
-        COMPARTMENT_PALETTE_MUTED_HEX["spine"],
-    ],
-    show_edges=False,
-)
-plotter.camera_position = [
-    (691950.9583624994, 500231.76529024437, 884896.4950618432),
-    (692935.685593285, 506349.5209391108, 894429.3798137115),
-    (0.9590183311048961, -0.27293547159452947, 0.0760925025889659),
-]
-plotter.enable_fly_to_right_click()
-# plotter.show()
-plotter.show(jupyter_backend="static")
-
-save_pyvista_figure(
-    plotter,
-    filename="classification",
-    out_path=figure_out_path,
-    formats=["svg", "png"],
-    scale=5,
-)
-
-# %%
-from tqdm import tqdm
-
-from meshmash import subset_mesh_by_indices
-
-all_borders = []
-unique_labels = np.unique(labels)
-for label in tqdm(unique_labels):
-    label_mesh = subset_mesh_by_indices(submesh, np.where(labels == label)[0])
-    if len(label_mesh[1]) == 0:
-        continue
-    poly = pv.make_tri_mesh(*label_mesh)
-    poly["index"] = np.arange(poly.n_points)
-    edges = poly.extract_feature_edges(
-        boundary_edges=True,
-        feature_edges=False,
-        non_manifold_edges=False,
-        manifold_edges=False,
-    )
-    all_borders.append(edges)
-
-# %%
-plotter = pv.Plotter(window_size=window_size)
-colors = sns.color_palette("husl", np.max(labels) + 1).as_hex()
-plotter.add_mesh(
-    pv.make_tri_mesh(*submesh),
-    scalars=labels,
-    cmap=colors,
-    interpolate_before_map=False,
-    show_edges=False,
-)
-for border in all_borders:
-    if border.n_points > 0:
-        plotter.add_mesh(border, color="black", line_width=5)
-        plotter.add_points(
-            border.points, color="black", point_size=5, render_points_as_spheres=True
-        )
-plotter.camera_position = [
-    (691673.2824964552, 505369.27117339516, 905212.8317382315),
-    (690760.625297867, 502177.7451042422, 896293.809805252),
-    (-0.8978140554931682, 0.4356941523220054, -0.06403536047622342),
-]
-plotter.enable_fly_to_right_click()
-plotter.show(jupyter_backend="static")
-# plotter.show()
-
-# save_pyvista_figure(
-#     plotter,
-#     filename="agglomeration",
-#     out_path=figure_out_path,
-#     formats=["svg", "png"],
-#     scale=5,
-# )
-
-
-# %%
-
-panel_mapping = {
-    "A": figure_out_path / "multiscale_heat_kernel.png",
-    "B": figure_out_path / "single_heat_trace.svg",
-}
-label_mapping = {
-    "A": "A",
-    "B": "B",
-    "C": "",
-}
-
-pm = PanelMosaic(
-    mosaic,
-    panel_mapping=panel_mapping,
-    label_mapping=label_mapping,
-    figsize=(28, 8),
-    label_fontsize=50,
-    layout="constrained",
-    panel_borders=False,
-)
-# pm.show_dummies()
-ax = pm.axs["A"]
-fontsize = 30
-# add an annotation arrow to the plot
-ann = ax.annotate(
-    "Initial heat\nat point",
-    xy=(0.13, 0.65),
-    xytext=(0.0, 0.9),
-    textcoords="axes fraction",
-    fontsize=fontsize,
-    color="black",
-    arrowprops=dict(facecolor="black", arrowstyle="-|>", lw=2),
-    horizontalalignment="left",
-    verticalalignment="top",
-)
-ann.set_path_effects([pe.withStroke(linewidth=2, foreground="white")])
-ann = ax.annotate(
-    "Heat remaining\nat point",
-    xy=(0.375, 0.65),
-    xytext=(0.225, 0.9),
-    textcoords="axes fraction",
-    fontsize=fontsize,
-    color="black",
-    arrowprops=dict(facecolor="black", arrowstyle="-|>", lw=2),
-    horizontalalignment="left",
-    verticalalignment="top",
-)
-ann.set_path_effects([pe.withStroke(linewidth=2, foreground="white")])
-
-for i in range(4):
-    text = ax.text(
-        i / 4,
-        0.02,
-        f"t={int(highlight_times[i]):,} (AU)",
-        fontsize=fontsize,
-        color="black",
-    )
-    text.set_path_effects([pe.withStroke(linewidth=2, foreground="white")])
-
-ax = pm.axs["C"]
-ax.set_xlim(0, 1)
-ax.set_ylim(0, 1)
-
-# trigger a draw from underlying renderer
-pm.lock_axes()
-ax = pm.axs["C"]
-ax.annotate(
-    "",
-    xy=(-0.0, 0.75),
-    xytext=(-0.6, 0.75),
-    textcoords="axes fraction",
-    arrowprops=dict(facecolor="black", arrowstyle="-|>", lw=2),
-    horizontalalignment="center",
-    verticalalignment="top",
-    clip_on=False,
-)
-ax.text(
-    0.05,
-    0.75,
-    "Rescaling",
-    fontsize=fontsize + 1,
-    ha="left",
-    va="center",
-    clip_on=True,
-    transform=ax.transAxes,
-    zorder=10,
-)
-
-pm.show()
-pm.write(figure_out_path / "explain_hks")
-pm.close()
-
-# %%

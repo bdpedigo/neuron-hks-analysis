@@ -1,9 +1,4 @@
 # %%
-import os
-
-os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:$DYLD_LIBRARY_PATH"
-
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd

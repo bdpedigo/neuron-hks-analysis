@@ -42,6 +42,7 @@ from analysis import (
     COMPARTMENT_PALETTE_MUTED_HEX,
     DATA_PATH,
     FIG_PATH,
+    VERSION,
     load_neuron_info,
     save_matplotlib_figure,
     save_variables,
@@ -74,8 +75,6 @@ rcdefaults()
 sns.set_context("talk")
 
 set_matplotlib_theme()
-
-VERSION = 1412
 
 figure_out_path = FIG_PATH / "stat_summaries"
 

@@ -12,6 +12,7 @@ from .io import (
     LABEL_CATEGORIES,
     LABEL_DETAILED_CATEGORIES,
     MTYPE_CATEGORIES,
+    VERSION,
     load_neuron_info,
 )
 
@@ -52,8 +53,6 @@ TABLE_PATHS = {
 
 
 DEDUPLICATE = True
-
-VERSION = 1412
 
 simple_spine_morphometry = False  # just load spine size and area if True
 

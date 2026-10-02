@@ -6,6 +6,8 @@ import pandas as pd
 from caveclient import CAVEclient
 from pytz import utc
 
+from .io import VERSION
+
 TABLE_WEIGHTS = {
     "vortex_compartment_targets": 1,
     "bdp_synapse_compartment_labels": 25,
@@ -13,7 +15,7 @@ TABLE_WEIGHTS = {
 }
 
 
-def get_validation_ids(client, root_version=1412) -> np.ndarray:
+def get_validation_ids(client, root_version=VERSION) -> np.ndarray:
     from .io import DATA_PATH
 
     validation_path = DATA_PATH / "validation" / "validation_ids_used.csv"
@@ -28,7 +30,7 @@ def get_validation_ids(client, root_version=1412) -> np.ndarray:
 
 
 def make_label_table(
-    annotation_timestamp="now", root_version=1412, threshold=None
+    annotation_timestamp="now", root_version=VERSION, threshold=None
 ) -> pd.DataFrame:
     client = CAVEclient("minnie65_phase3_v1")
 

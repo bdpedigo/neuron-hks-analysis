@@ -1,8 +1,4 @@
 # %%
-import os
-
-os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:$DYLD_LIBRARY_PATH"
-
 from pathlib import Path
 
 from panel_mosaic import PanelMosaic

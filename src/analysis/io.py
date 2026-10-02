@@ -12,7 +12,7 @@ import pyvista as pv
 from caveclient import CAVEclient
 from joblib import Parallel, delayed, load
 from standard_transform.datasets import minnie_transform_nm
-
+import datetime
 from .utils import project_points_to_mesh
 
 # src/analysis/ -> src/ -> neuron-hks-analysis/
@@ -23,6 +23,11 @@ FIG_PATH = PROJECT_ROOT / "figures"
 FONT_PATH = Path(matplotlib.get_data_path()) / "fonts" / "ttf" / "DejaVuSans.ttf"
 MESH_DATA_PATH = DATA_PATH / "computed_mesh_data"
 MODEL_PATH = DATA_PATH / "models"
+
+# default CAVE materialization version used across the package and scripts
+VERSION = 1822
+VERSION_TIMESTAMP = datetime.datetime(2026, 6, 27, 14, 5, 22, 813147, tzinfo=datetime.timezone.utc)
+
 
 
 def param_name(**kwargs):
@@ -366,7 +371,7 @@ def load_model(model_name):
     return load(MODEL_PATH / f"{model_name}.joblib")
 
 
-def _read_root_synapses(root_id: int, side="post", version=1412) -> pd.DataFrame:
+def _read_root_synapses(root_id: int, side="post", version=VERSION) -> pd.DataFrame:
     if side == "post":
         file_path = (
             DATA_PATH / f"column_labeled_post_synapses_{version}" / f"{root_id}.csv.gz"
@@ -383,7 +388,7 @@ def _read_root_synapses(root_id: int, side="post", version=1412) -> pd.DataFrame
     return pd.read_csv(file_path, index_col=0)
 
 
-def read_synapses(root_ids: int, side="post", version=1412) -> pd.DataFrame:
+def read_synapses(root_ids: int, side="post", version=VERSION) -> pd.DataFrame:
     if isinstance(root_ids, int):
         root_ids = [root_ids]
 
@@ -456,11 +461,11 @@ COMPARTMENT_CATEGORIES = ["axon", "dendrite", "perisoma", "unknown"]
 TABLE_CACHE_PATH = DATA_PATH / "table_cache"
 
 
-def _get_client(version=1412):
+def _get_client(version=VERSION):
     return CAVEclient("minnie65_public", version=version)
 
 
-def load_neuron_info(version=1412, transform_positions=True, add_thalamic=True):
+def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=True):
     query_args = dict(desired_resolution=[1, 1, 1], split_positions=True)
 
     table_path = DATA_PATH / f"v{version}-aibs_cell_info.csv.gz"
