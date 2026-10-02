@@ -29,8 +29,8 @@ def get_validation_ids(client, root_version=VERSION) -> np.ndarray:
     return validation_root_ids
 
 
-def make_label_table(
-    annotation_timestamp="now", root_version=VERSION, threshold=None
+def get_label_table(
+    root_version=VERSION, threshold=None, live=False,
 ) -> pd.DataFrame:
     client = CAVEclient("minnie65_phase3_v1")
 
@@ -41,8 +41,12 @@ def make_label_table(
         "bdp_synapse_compartment_labels",
         "bdp_point_compartment_labels",
     ]
-    if annotation_timestamp == "now":
+    root_timestamp = client.materialize.get_timestamp(root_version)
+    if live:
         annotation_timestamp = datetime.now(tz=utc)
+        _use_cache = False # TODO how to get this into the decorator?
+    else:
+        annotation_timestamp = root_timestamp
     keep_cols = [
         "id",
         "target_id",
@@ -56,7 +60,7 @@ def make_label_table(
         "table_name",
         "created",
     ]
-    root_timestamp = client.materialize.get_timestamp(root_version)
+    
     tables = []
     for table_name in table_names:
         print(f"Loading {table_name}...")
@@ -67,7 +71,6 @@ def make_label_table(
             split_positions=True,
             log_warning=False,
         )
-        # table.query("valid == 't'", inplace=True)
         table.drop(columns=drop_cols, errors="ignore", inplace=True)
         if "target_id" in table.columns:
             base_table = client.materialize.query_table(

@@ -65,7 +65,7 @@ from .utils import (
     set_matplotlib_theme,
     set_pyvista_theme,
 )
-from .wrangle import get_synapse_sizes, get_validation_ids, make_label_table
+from .wrangle import get_synapse_sizes, get_validation_ids, get_label_table
 
 __all__ = [
     "load_signatures",
@@ -91,7 +91,7 @@ __all__ = [
     "make_spheres_from_points",
     "mask_dendrite_by_client_skeleton",
     "get_experiment_info",
-    "make_label_table",
+    "get_label_table",
     "get_synapse_sizes",
     "get_validation_ids",
     "CELL_TYPE_PALETTE",
