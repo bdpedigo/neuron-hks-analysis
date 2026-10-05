@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import os
 import shutil
 from functools import wraps
@@ -464,12 +465,21 @@ TABLE_PATH = DATA_PATH / "tables"
 
 
 def cache_table(name: str):
-    """Decorator caching a wrapped function's DataFrame result as parquet under TABLE_PATH/v{version}."""
+    """Decorator caching a wrapped function's DataFrame result as parquet under TABLE_PATH/v{version}.
+
+    `name` may contain `{param}` placeholders, resolved against the wrapped function's bound
+    arguments (including defaults), so the cache key can vary by more than just `version`.
+    """
 
     def decorator(func):
+        sig = inspect.signature(func)
+
         @wraps(func)
         def wrapper(*args, version=VERSION, **kwargs):
-            path = TABLE_PATH / f"v{version}" / f"{name}.parquet"
+            bound = sig.bind_partial(*args, version=version, **kwargs)
+            bound.apply_defaults()
+            resolved_name = name.format(**bound.arguments)
+            path = TABLE_PATH / f"v{version}" / f"{resolved_name}.parquet"
             if path.exists():
                 return pl.read_parquet(path)
 

@@ -208,3 +208,5 @@ __marimo__/
 
 figures
 *.DS_Store
+data/ # TEMPORARY
+/scratch
