@@ -66,12 +66,8 @@ from .utils import (
     set_pyvista_theme,
 )
 from .wrangle import get_synapse_sizes, get_validation_ids, get_label_table
-from .features import (
-    synapse_mapping_lf,
-    vertex_domains_lf,
-    synapse_to_domain_lf,
-    domain_features_lf,
-)
+from .catalog import Tables
+from . import features  # noqa: F401 -- populates the Tables registry
 
 __all__ = [
     "load_signatures",
@@ -135,4 +131,5 @@ __all__ = [
     "DATA_PATH",
     "TABLE_PATH",
     "PROJECT_ROOT",
+    "Tables",
 ]

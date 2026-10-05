@@ -1,5 +1,10 @@
 import polars as pl
+import polars_io_tools  # noqa: F401 -- registers the .piot namespace
 from upath import UPath
+
+from .catalog import Tables
+from .io import VERSION
+from .wrangle import get_label_table
 
 DATASTACK = "minnie65_phase3_v1"
 BASE_CLOUD_PATH = "gs://bdp-ssa/meshmash-deployment"
@@ -45,13 +50,65 @@ def _latest_attempt(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf.filter(pl.col("attempt_id") == pl.col("attempt_id").max().over("root_id"))
 
 
-synapse_mapping_lf = _latest_attempt(pl.scan_delta(synapse_mapping_path)).select(
-    "root_id", "synapse_id", "mesh_index"
+Tables.register(
+    "synapse_mapping",
+    lambda: _latest_attempt(pl.scan_delta(synapse_mapping_path)).select(
+        "root_id", "synapse_id", "mesh_index"
+    ),
 )
-vertex_domains_lf = _latest_attempt(pl.scan_delta(vertex_domains_path)).select(
-    "root_id", "mesh_index", "domain_id"
+Tables.register(
+    "vertex_domains",
+    lambda: _latest_attempt(pl.scan_delta(vertex_domains_path)).select(
+        "root_id", "mesh_index", "domain_id"
+    ),
 )
-synapse_to_domain_lf = synapse_mapping_lf.join(
-    vertex_domains_lf, on=["root_id", "mesh_index"], how="left"
-).drop("mesh_index")
-domain_features_lf = _latest_attempt(pl.scan_delta(domain_features_path))
+Tables.register(
+    "synapse_to_domain",
+    lambda: Tables["synapse_mapping"]
+    .lazy()
+    .join(Tables["vertex_domains"].lazy(), on=["root_id", "mesh_index"], how="left")
+    .drop("mesh_index"),
+)
+Tables.register(
+    "domain_features",
+    lambda: _latest_attempt(pl.scan_delta(domain_features_path)),
+)
+Tables.register("labels", lambda: get_label_table(version=VERSION).lazy())
+Tables.register(
+    "synapse_labels",
+    lambda: Tables["labels"]
+    .lazy()
+    .filter(pl.col("target_id") != -1)
+    .rename({"target_id": "synapse_id", f"pt_root_id_{VERSION}": "root_id"}),
+)
+
+
+# TODO performance here will degrade once we have more cloud data
+# need to either accept that or include the hash in the join or something
+# that might not even help based on root ID coverage
+# TODO also doubt that the filtered_join is very effective here for the same reason
+def synapse_features_lf(synapses: pl.LazyFrame) -> pl.LazyFrame:
+    return (
+        synapses.piot.filtered_join(
+            Tables["synapse_to_domain"].lazy(),
+            on=["root_id", "synapse_id"],
+            how="left",
+            coalesce=False,
+        )
+        .join(Tables["domain_features"].lazy(), on=["root_id", "domain_id"], how="left")
+        .drop("domain_id")
+    )
+
+
+Tables.register(
+    "labeled_synapse_features",
+    lambda: synapse_features_lf(Tables["synapse_labels"].lazy()),
+    cache_params={
+        "synapse_mapping_version": synapse_mapping_version,
+        "synapse_mapping_params": synapse_mapping_params,
+        "vertex_domains_version": vertex_domains_version,
+        "vertex_domains_params": vertex_domains_params,
+        "domain_features_version": domain_features_version,
+        "domain_features_params": domain_features_params,
+    },
+)
