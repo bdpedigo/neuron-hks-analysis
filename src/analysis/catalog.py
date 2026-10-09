@@ -9,16 +9,26 @@ from .io import TABLE_PATH, VERSION, param_hash
 
 class Table:
     """A named table whose query plan is built lazily on first access, with optional
-    opt-in parquet caching (keyed by `cache_params`) independent of its ingredients."""
+    opt-in parquet caching (keyed by `cache_params`) independent of its ingredients.
+
+    A table is defined either by `build`, a query plan, or by `materialize`, which
+    writes the table as parquet files under the path it is given. A materialized
+    table needs `cache_params`."""
 
     def __init__(
         self,
         name: str,
-        build: Callable[[], pl.LazyFrame],
+        build: Optional[Callable[[], pl.LazyFrame]] = None,
         cache_params: Optional[dict] = None,
+        materialize: Optional[Callable[[Path], None]] = None,
     ):
+        if (build is None) == (materialize is None):
+            raise ValueError(f"{name!r}: pass exactly one of `build` or `materialize`")
+        if materialize is not None and cache_params is None:
+            raise ValueError(f"{name!r}: a materialized table needs `cache_params`")
         self.name = name
         self._build = build
+        self._materialize = materialize
         self.cache_params = cache_params
 
     @cached_property
@@ -36,18 +46,19 @@ class Table:
         path = self.cache_path
         if path is not None and path.exists():
             return pl.scan_parquet(path)
-        else: 
-            return self._plan
+        if self._materialize is not None:
+            self._materialize(path)
+            return pl.scan_parquet(path)
+        return self._plan
 
     def collect(self, **kwargs) -> pl.DataFrame:
         path = self.cache_path
-        if path is not None and path.exists():
-            return pl.read_parquet(path)
-        df = self._plan.collect(**kwargs)
-        if path is not None:
+        if self._build is not None and path is not None and not path.exists():
+            df = self._plan.collect(**kwargs)
             path.parent.mkdir(parents=True, exist_ok=True)
             df.write_parquet(path, compression="snappy")
-        return df
+            return df
+        return self.lazy().collect(**kwargs)
 
     @cached_property
     def schema(self) -> pl.Schema:
@@ -65,10 +76,11 @@ class TableRegistry:
     def register(
         self,
         name: str,
-        build: Callable[[], pl.LazyFrame],
+        build: Optional[Callable[[], pl.LazyFrame]] = None,
         cache_params: Optional[dict] = None,
+        materialize: Optional[Callable[[Path], None]] = None,
     ) -> Table:
-        table = Table(name, build, cache_params=cache_params)
+        table = Table(name, build, cache_params=cache_params, materialize=materialize)
         self._tables[name] = table
         return table
 
