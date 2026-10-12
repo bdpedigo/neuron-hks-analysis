@@ -19,7 +19,7 @@ TABLE_WEIGHTS = {
 def get_validation_ids(client, version=VERSION) -> np.ndarray:
     from .io import TABLE_PATH
 
-    validation_path = TABLE_PATH / "general" / "validation_ids_used.csv"
+    validation_path = TABLE_PATH / "validation" / "validation_ids_used.csv"
     validation_ids = pd.read_csv(validation_path)["nucleus_id"].unique()
     validation_nuc_table = client.materialize.query_view(
         "nucleus_detection_lookup_v1",
