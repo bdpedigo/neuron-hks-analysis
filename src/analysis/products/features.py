@@ -204,8 +204,8 @@ def add_distance_to_nucleus(lf: pl.LazyFrame, nuclei: pl.LazyFrame) -> pl.LazyFr
     )
 
 
-# NOTE: the deployment cannot compute `distance_to_nucleus` yet
-# (meshmash-deployment), so the feature is added here
+# NOTE: meshmash-deployment computes `distance_to_nucleus` in its prediction step,
+# not in `domain_features`, so the training rows get the feature here
 Tables.register(
     "training_features",
     lambda: add_distance_to_nucleus(

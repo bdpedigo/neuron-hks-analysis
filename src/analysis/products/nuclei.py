@@ -9,8 +9,8 @@ from .sources import DATASTACK
 
 # NOTE: a root can have more than one nucleus (for example, a merge), so this
 # table has one row per nucleus, not per root. The feature is the distance to
-# the nearest nucleus of the root. The deployment must use the same rule when it
-# computes the feature (meshmash-deployment TASK-99).
+# the nearest nucleus of the root. meshmash-deployment computes the feature with
+# the same rule in its domain prediction step; keep the two in step.
 NUCLEUS_VIEW = "nucleus_detection_lookup_v1"
 
 

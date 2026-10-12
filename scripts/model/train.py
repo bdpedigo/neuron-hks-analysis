@@ -63,67 +63,115 @@ figure_out_path = FIG_PATH / "model_training"
 
 FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
 spectral_columns = [c for c in result.columns if c.startswith(FEATURE_PREFIXES)]
+
 # NOTE: `distance_to_nucleus` is null for a root with no nucleus point. The
-# random forest accepts missing values, so those rows stay in.
-EXTRA_FEATURES = ["distance_to_nucleus"]
-feature_columns = spectral_columns + EXTRA_FEATURES
+# random forest accepts missing values, so those rows stay in. See also the mask
+# below.
+MODEL_SPECS = {
+    "ssa_model_full": dict(extra_features=["distance_to_nucleus"], binary=False),
+    "ssa_model_no_nuc": dict(extra_features=[], binary=False),
+    "ssa_model_binary": dict(extra_features=[], binary=True),
+}
+# The learning curve, the glued variables and every downstream figure use this one.
+MAIN_MODEL = "ssa_model_full"
+# NOTE: a published model name is write-once in meshmash-deployment, so bump this
+# before publishing a retrained model.
+MODEL_VERSION = "v1"
 
-
-# training_table = result.to_pandas().set_index("synapse_id")
-# # rows without domain features (not yet processed by the meshmash deployment) can't
-# # be used for training or evaluation
+# rows without domain features (not yet processed by the meshmash deployment) can't
+# be used for training or evaluation. Every variant trains on these same rows.
 training_table = result.drop_nulls(subset=spectral_columns).to_pandas().set_index(
     "synapse_id"
 )
-
-X_train = training_table[feature_columns]
-y_train = training_table["tag"]
 sample_weight = training_table["sample_weight"].astype(float)
 
-save_variables(model_n_training_synapses=len(X_train), format="{:,}")
+save_variables(model_n_training_synapses=len(training_table), format="{:,}")
 
-#%%
-X_train
+# NOTE: almost every training root has a nucleus, but many deployment roots do not
+# (for example, orphan fragments). Without masking, the forest sees almost no missing
+# distances and sends them down whichever branch is larger. So the distance is set
+# to null on a fixed share of the training roots. The mask is by root, the same way
+# a missing nucleus looks in the deployment.
+NUCLEUS_MASK_FRACTION = 0.2
+NUCLEUS_MASK_SEED = 0
+save_variables(params_nucleus_mask_fraction=NUCLEUS_MASK_FRACTION)
 
-# %% train the main model on all available synapses
+_roots = np.sort(training_table["root_id"].unique())
+nucleus_masked_roots = np.random.default_rng(NUCLEUS_MASK_SEED).permutation(_roots)[
+    : round(NUCLEUS_MASK_FRACTION * len(_roots))
+]
+nucleus_masked = training_table["root_id"].isin(nucleus_masked_roots)
 
-currtime = time.time()
-model = RandomForestClassifier(
-    class_weight="balanced",
-    max_depth=15,
-    n_estimators=500,
-    n_jobs=-1,
-    random_state=0,
+
+def make_xy(spec):
+    X = training_table[spectral_columns + spec["extra_features"]]
+    if "distance_to_nucleus" in X:
+        X = X.assign(distance_to_nucleus=X["distance_to_nucleus"].mask(nucleus_masked))
+    y = training_table["tag"]
+    if spec["binary"]:
+        # `soma_spine` is already `spine` in the label table, so this merges only
+        # soma and shaft.
+        y = y.where(y == "spine", "not_spine")
+    return X, y
+
+
+RF_PARAMS = dict(class_weight="balanced", max_depth=15, n_estimators=500)
+save_variables(
+    params_rf_max_depth=RF_PARAMS["max_depth"],
+    params_rf_n_estimators=RF_PARAMS["n_estimators"],
 )
-model.fit(X_train, y_train, sample_weight=sample_weight)
-print(f"{time.time() - currtime:.3f} seconds elapsed for training model.")
 
-# Saved in the MLflow model format, which records this environment and the
-# feature signature. meshmash-deployment publishes it from this directory with
-# `just publish-model`; it refuses a model without `classes` and `trained_on`.
-# The folder is named after the domain_features table the model was trained on
-# and any extra features, so a run replaces only a model trained on the same
-# features.
-model_dir = MODEL_PATH / "-".join(
-    ["synapse_hks_model", DOMAIN_FEATURES_VERSION, DOMAIN_FEATURES_PARAMS, *EXTRA_FEATURES]
-)
-shutil.rmtree(model_dir, ignore_errors=True)  # save_model refuses a non-empty path
-mlflow.sklearn.save_model(
-    model,
-    str(model_dir),
-    signature=infer_signature(X_train.head(5), model.predict_proba(X_train.head(5))),
-    metadata={
-        "classes": [str(label) for label in model.classes_],
-        # The domain_features table the training rows were joined from.
-        "trained_on": {
-            "product": "domain_features",
-            "param_hash": DOMAIN_FEATURES_PARAMS,
-            "step_version": DOMAIN_FEATURES_VERSION,
+
+def make_model(random_state):
+    return RandomForestClassifier(**RF_PARAMS, n_jobs=-1, random_state=random_state)
+
+
+def save_model(model, X, name):
+    # Saved in the MLflow model format, which records this environment and the
+    # feature signature. meshmash-deployment publishes it from this directory with
+    # `just publish-model`; it refuses a model without `classes` and `trained_on`.
+    # The folder name is also the published name. A rerun at the same MODEL_VERSION
+    # replaces the local folder.
+    model_dir = MODEL_PATH / f"{name}_{MODEL_VERSION}"
+    shutil.rmtree(model_dir, ignore_errors=True)  # save_model refuses a non-empty path
+    mlflow.sklearn.save_model(
+        model,
+        str(model_dir),
+        signature=infer_signature(X.head(5), model.predict_proba(X.head(5))),
+        metadata={
+            "classes": [str(label) for label in model.classes_],
+            # The domain_features table the training rows were joined from.
+            "trained_on": {
+                "product": "domain_features",
+                "param_hash": DOMAIN_FEATURES_PARAMS,
+                "step_version": DOMAIN_FEATURES_VERSION,
+            },
         },
-    },
-    # skops refuses tree internals unless named; this model is our own.
-    skops_trusted_types=["sklearn.tree._tree.Tree"],
-)
+        # skops refuses tree internals unless named; this model is our own.
+        skops_trusted_types=["sklearn.tree._tree.Tree"],
+    )
+    return model_dir
+
+
+# %% train and save each variant on all available synapses
+
+models = {}
+for name, spec in MODEL_SPECS.items():
+    X, y = make_xy(spec)
+    currtime = time.time()
+    model = make_model(random_state=0)
+    model.fit(X, y, sample_weight=sample_weight)
+    model_dir = save_model(model, X, name)
+    print(
+        f"{name}: {time.time() - currtime:.1f} s, {X.shape[1]} features, "
+        f"classes {list(model.classes_)}, saved to {model_dir}"
+    )
+    models[name] = model
+
+# %% the learning curve below uses only the main model's features and labels
+
+X_train, y_train = make_xy(MODEL_SPECS[MAIN_MODEL])
+model = models[MAIN_MODEL]
 
 
 # %% learning curve: how much training data do we actually need?
@@ -152,13 +200,7 @@ for fold in tqdm(range(10)):
     for frac in data_fractions:
         n_samples = int(len(X_train_fold) * frac)
         sample_indices = rng.choice(len(X_train_fold), size=n_samples, replace=False)
-        fold_model = RandomForestClassifier(
-            class_weight="balanced",
-            max_depth=15,
-            n_estimators=500,
-            n_jobs=-1,
-            random_state=fold,
-        )
+        fold_model = make_model(random_state=fold)
         fold_model.fit(
             X_train_fold.iloc[sample_indices],
             y_train_fold.iloc[sample_indices],
@@ -279,7 +321,7 @@ validation_features = (
 )
 
 val_index = validation_features.index.intersection(manual_labels.index)
-X_validation = validation_features.loc[val_index, feature_columns]
+X_validation = validation_features.loc[val_index, X_train.columns]
 
 # %% score the model against the validation set
 
