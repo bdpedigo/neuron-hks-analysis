@@ -29,10 +29,11 @@ from analysis import (
     save_variables,
     set_matplotlib_theme,
 )
-from analysis.features import (
-    domain_features_params,
-    domain_features_version,
-    synapse_features,
+from analysis.products.features import add_distance_to_nucleus, synapse_features
+from analysis.products.sources import (
+    DOMAIN_FEATURES_PARAMS,
+    DOMAIN_FEATURES_VERSION,
+    LABELED_AS_OF,
 )
 
 # %%
@@ -45,13 +46,13 @@ base = UPath(base)
 
 # %%
 
-joined = Tables["labeled_synapse_features"].lazy()
+joined = Tables["training_features"].lazy()
 
 joined.collect_schema()
 # %%
 
 start_time = time.time()
-result = Tables["labeled_synapse_features"].collect(engine="streaming")
+result = Tables["training_features"].collect()
 end_time = time.time()
 print("Collection time:", end_time - start_time)
 
@@ -61,19 +62,17 @@ set_matplotlib_theme()
 figure_out_path = FIG_PATH / "model_training"
 
 FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
-FEATURE_EXTRAS = [
-    "domain_area",
-    "domain_n_vertices",
-    "mesh_component_area",
-    "mesh_component_n_vertices",
-]
-feature_columns = [
-    c for c in result.columns if c.startswith(FEATURE_PREFIXES)
-]
+spectral_columns = [c for c in result.columns if c.startswith(FEATURE_PREFIXES)]
+# NOTE: `distance_to_nucleus` is null for a root with no nucleus point. The
+# random forest accepts missing values, so those rows stay in.
+EXTRA_FEATURES = ["distance_to_nucleus"]
+feature_columns = spectral_columns + EXTRA_FEATURES
 
-# rows without domain features (not yet processed by the meshmash deployment) can't
-# be used for training or evaluation
-training_table = result.drop_nulls(subset=feature_columns).to_pandas().set_index(
+
+# training_table = result.to_pandas().set_index("synapse_id")
+# # rows without domain features (not yet processed by the meshmash deployment) can't
+# # be used for training or evaluation
+training_table = result.drop_nulls(subset=spectral_columns).to_pandas().set_index(
     "synapse_id"
 )
 
@@ -83,6 +82,9 @@ sample_weight = training_table["sample_weight"].astype(float)
 
 save_variables(model_n_training_synapses=len(X_train), format="{:,}")
 
+#%%
+X_train
+
 # %% train the main model on all available synapses
 
 currtime = time.time()
@@ -91,6 +93,7 @@ model = RandomForestClassifier(
     max_depth=15,
     n_estimators=500,
     n_jobs=-1,
+    random_state=0,
 )
 model.fit(X_train, y_train, sample_weight=sample_weight)
 print(f"{time.time() - currtime:.3f} seconds elapsed for training model.")
@@ -98,7 +101,12 @@ print(f"{time.time() - currtime:.3f} seconds elapsed for training model.")
 # Saved in the MLflow model format, which records this environment and the
 # feature signature. meshmash-deployment publishes it from this directory with
 # `just publish-model`; it refuses a model without `classes` and `trained_on`.
-model_dir = MODEL_PATH / "synapse_hks_model_on_bulk"
+# The folder is named after the domain_features table the model was trained on
+# and any extra features, so a run replaces only a model trained on the same
+# features.
+model_dir = MODEL_PATH / "-".join(
+    ["synapse_hks_model", DOMAIN_FEATURES_VERSION, DOMAIN_FEATURES_PARAMS, *EXTRA_FEATURES]
+)
 shutil.rmtree(model_dir, ignore_errors=True)  # save_model refuses a non-empty path
 mlflow.sklearn.save_model(
     model,
@@ -109,13 +117,14 @@ mlflow.sklearn.save_model(
         # The domain_features table the training rows were joined from.
         "trained_on": {
             "product": "domain_features",
-            "param_hash": domain_features_params,
-            "step_version": domain_features_version,
+            "param_hash": DOMAIN_FEATURES_PARAMS,
+            "step_version": DOMAIN_FEATURES_VERSION,
         },
     },
     # skops refuses tree internals unless named; this model is our own.
     skops_trusted_types=["sklearn.tree._tree.Tree"],
 )
+
 
 # %% learning curve: how much training data do we actually need?
 
@@ -139,16 +148,16 @@ for fold in tqdm(range(10)):
     y_train_fold, y_test_fold = y_train.iloc[train_index], y_train.iloc[test_index]
     weights_train_fold = sample_weight.iloc[train_index]
 
+    rng = np.random.default_rng(fold)
     for frac in data_fractions:
         n_samples = int(len(X_train_fold) * frac)
-        sample_indices = np.random.choice(
-            len(X_train_fold), size=n_samples, replace=False
-        )
+        sample_indices = rng.choice(len(X_train_fold), size=n_samples, replace=False)
         fold_model = RandomForestClassifier(
             class_weight="balanced",
             max_depth=15,
             n_estimators=500,
             n_jobs=-1,
+            random_state=fold,
         )
         fold_model.fit(
             X_train_fold.iloc[sample_indices],
@@ -165,6 +174,7 @@ for fold in tqdm(range(10)):
 score_df = pd.DataFrame(rows)
 
 save_variables(model_sample_curve_n_test_synapses=len(test_index), format="{:,}")
+
 
 # %%
 
@@ -202,6 +212,9 @@ save_variables(
     },
     format="{:,}",
 )
+
+# the below was mostly superseeded by validation.py
+quit()
 
 # %% 
 
@@ -253,9 +266,14 @@ validation_synapse_ids = pl.DataFrame(
     }
 )
 
+# NOTE ALL OF THIS NEEDS AN UPDATE FOR THE NEW SCHEME OF TABLES
 validation_features = (
-    synapse_features(validation_synapse_ids)
-    .drop_nulls(subset=feature_columns)
+    add_distance_to_nucleus(
+        synapse_features(validation_synapse_ids, as_of=LABELED_AS_OF).lazy(),
+        Tables["root_nuclei"].lazy(),
+    )
+    .collect()
+    .drop_nulls(subset=spectral_columns)
     .to_pandas()
     .set_index("synapse_id")
 )

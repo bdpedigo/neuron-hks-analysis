@@ -65,9 +65,9 @@ from .utils import (
     set_matplotlib_theme,
     set_pyvista_theme,
 )
-from .wrangle import get_synapse_sizes, get_validation_ids, get_label_table
-from .catalog import Tables
-from . import features  # noqa: F401 -- populates the Tables registry
+from .wrangle import get_synapse_sizes
+from .products import Tables
+from .products.labels import get_label_table, get_validation_ids
 
 __all__ = [
     "load_signatures",
