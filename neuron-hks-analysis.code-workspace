@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "../meshrep"
+		},
+		{
+			"path": "../ssa"
+		},
+		{
+			"path": "../../meshmash-deployment"
 		}
 	],
 	"settings": {}

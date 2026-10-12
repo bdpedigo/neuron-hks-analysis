@@ -203,9 +203,7 @@ save_variables(
     format="{:,}",
 )
 
-# %% pull a hand-annotated validation set from saved neuroglancer states
-# (these synapses are independent of the training labels above; see
-# get_validation_ids / _fetch_label_table for how they're excluded from training)
+# %% 
 
 validation_state_urls = """
 https://spelunker.cave-explorer.org/#!middleauth+https://global.daf-apis.com/nglstate/api/v1/5402780981264384
