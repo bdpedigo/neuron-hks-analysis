@@ -1,4 +1,6 @@
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -17,18 +19,23 @@ BASE_CLOUD_PATH = "gs://bdp-ssa/meshmash-deployment"
 base = UPath(BASE_CLOUD_PATH)
 
 synapse_mapping_version = "s2"
-synapse_mapping_params = "p-72b901b7386541b7"
+synapse_mapping_params = "p-663726ec6deb9adf"
 
-vertex_domains_version = "s2"
-# vertex_domains_params = "p-2e737b09a92af64d"
-vertex_domains_params = "p-0f6493d8b4cf1870"
+vertex_domains_version = "s3"
+vertex_domains_params = "p-2e737b09a92af64d"
 
-domain_features_version = "s2"
-# domain_features_params = "p-4b0b62980242847a"
-domain_features_params = "p-90e8423092581ed2"
+domain_features_version = "s3"
+domain_features_params = "p-e758527c9d981378"
 
-domain_edges_version = "s2"
-domain_edges_params = "p-b60a113f02ed8102" # old
+domain_edges_version = "s3"
+domain_edges_params = "p-b60a113f02ed8102"
+
+# NOTE: the deployment tables are append-only, and the latest attempt per root
+# wins at read time. Rows of attempts after this cutoff are ignored, so a table
+# that grows later (for example, the full run) reads the same as it does now.
+# attempt_id is milliseconds since the Unix epoch.
+as_of = datetime(2026, 10, 12, 4, 13, tzinfo=timezone.utc)
+as_of_attempt_id = int(as_of.timestamp() * 1000)
 
 synapse_mapping_path = (
     base
@@ -54,7 +61,9 @@ domain_edges_path = (
 
 def _latest_attempt(lf: pl.LazyFrame) -> pl.LazyFrame:
     # An attempt replaces all of a root's rows at once (dedupe_key="root_id"),
-    # so the newest attempt_id for a root wins, whole-root.
+    # so the newest attempt_id for a root wins, whole-root. The as_of cutoff
+    # comes first, because it decides which attempts can win.
+    lf = lf.filter(pl.col("attempt_id") <= as_of_attempt_id)
     return lf.filter(pl.col("attempt_id") == pl.col("attempt_id").max().over("root_id"))
 
 
@@ -103,8 +112,12 @@ def _scan_roots(table_root: UPath, root_ids: list[int]) -> pl.LazyFrame:
     buckets = sorted({hash_partition(root_id, n_buckets) for root_id in root_ids})
     # NOTE: Polars cannot derive `root_id_bucket` from `root_id`, so without the
     # bucket filter it opens every file in every bucket.
+    # NOTE: the as_of cutoff is part of the scan, so both the query that picks
+    # each root's winning attempt and the rows joined to it respect it.
     return pl.scan_delta(_delta_table(str(table_root))).filter(
-        pl.col("root_id_bucket").is_in(buckets), pl.col("root_id").is_in(root_ids)
+        pl.col("root_id_bucket").is_in(buckets),
+        pl.col("root_id").is_in(root_ids),
+        pl.col("attempt_id") <= as_of_attempt_id,
     )
 
 
@@ -181,10 +194,11 @@ def _write_part(synapses: pl.DataFrame, part: Path) -> None:
 def write_synapse_features(
     synapses: pl.DataFrame, out: Path, n_chunks: int = 64, max_workers: int = 4
 ) -> None:
-    """Write `synapse_features(synapses)` to `out` as a directory of parquet parts.
+    """Write `synapse_features(synapses)` to `out` as a single parquet file.
 
     Up to `max_workers` chunks of roots run at once, and peak memory is about that
-    many chunks. An interrupted run resumes from the parts it finished.
+    many chunks. Each chunk is written as a part, and the parts are combined into
+    `out` at the end. An interrupted run resumes from the parts it finished.
     """
     # NOTE: chunks group roots by bucket[n_chunks]. Bucket counts nest, so when
     # n_chunks divides a table's bucket count, each chunk reads only
@@ -208,7 +222,12 @@ def write_synapse_features(
         futures = [pool.submit(_write_part, *item) for item in todo]
         for future in tqdm(as_completed(futures), total=len(futures)):
             future.result()
-    partial.rename(out)
+    # NOTE: the parts are combined in a streaming pass, so the whole table is
+    # never in memory at once.
+    tmp = out.with_name(out.name + ".tmp")
+    pl.scan_parquet(partial / "*.parquet").sink_parquet(tmp, compression="snappy")
+    tmp.rename(out)
+    shutil.rmtree(partial)
 
 
 Tables.register(
@@ -217,6 +236,8 @@ Tables.register(
         Tables["synapse_labels"].collect(), path
     ),
     cache_params={
+        "labels": f"label_table_v{VERSION}",
+        "as_of": as_of.isoformat(),
         "synapse_mapping_version": synapse_mapping_version,
         "synapse_mapping_params": synapse_mapping_params,
         "vertex_domains_version": vertex_domains_version,

@@ -82,7 +82,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 ### Model and validation track
 
 **P1 `label_table`** (labeled, 5 MB)
-- Origin: S6. Pin: v1822 timestamp (annotations and segmentation). Cache: `data/tables/v1822/label_table_threshold=None.parquet`. Kind: rebuildable.
+- Origin: S6. Pin: v1822 timestamp (annotations and segmentation). Cache: `data/tables/v1822/label_table.parquet`. Kind: rebuildable.
 - [x] Built by `wrangle.get_label_table`. `live=True` queries annotations at the current time and skips the cache.
 - [x] Validation cells are excluded. On 2026-10-11, the cached table had 0 rows on the 132 validation roots (nucleus ID → v1822 root through S1), and none of the 3,300 validation `synapse_id`s.
 - [x] Fixed the path in `get_validation_ids` (`data/tables/general/` → `data/tables/validation/`).
@@ -90,7 +90,8 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 **P2 `labeled_synapse_features`** (labeled, about 60 MB)
 - Origin: P1 ⋈ S2. Pin: P1 + S2 (`as_of`). Cache: `data/tables/v1822/labeled_synapse_features-{hash}.parquet/`. Kind: rebuildable.
 - [x] Built for s2 features (now stale).
-- [ ] Rebuild on the s3 paths. Delete the three stale `labeled_synapse_features-*` files in `data/tables/v1822/`.
+- [x] `features.py` points at the s3 paths, with `as_of` = 2026-10-12 04:13 UTC. The labeled job is complete, except for 1 root (a large merge that cannot be processed).
+- [ ] Rebuild. Delete the three stale `labeled_synapse_features-*` files in `data/tables/v1822/`.
 
 **P3 HKS synapse model**
 - Origin: P2, by `scripts/model/train.py`. Pin: P2 + training parameters + random seed. Cache: `data/models/`. Kind: frozen, because S3 depends on this exact model. Keep it in MLflow.

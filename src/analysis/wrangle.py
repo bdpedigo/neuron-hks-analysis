@@ -30,8 +30,8 @@ def get_validation_ids(client, version=VERSION) -> np.ndarray:
     return validation_root_ids
 
 
-@cache_table("label_table_threshold={threshold}")
-def _fetch_label_table(version=VERSION, threshold=None, live=False) -> pl.DataFrame:
+@cache_table("label_table")
+def _fetch_label_table(version=VERSION, live=False) -> pl.DataFrame:
     client = CAVEclient("minnie65_phase3_v1")
 
     # drop_cols = ["valid", "superceded_id"]
@@ -107,11 +107,6 @@ def _fetch_label_table(version=VERSION, threshold=None, live=False) -> pl.DataFr
         # )
         # print()
 
-        if table_name == "vortex_compartment_targets" and threshold is not None:
-            counts = table.groupby(f"pt_root_id_{version}").size()
-            keep_index = counts[counts >= threshold].index
-            table = table[table[f"pt_root_id_{version}"].isin(keep_index)]
-
         table["table_name"] = table_name
         tables.append(table[table.columns.intersection(keep_cols)])
 
@@ -158,14 +153,11 @@ def _fetch_label_table(version=VERSION, threshold=None, live=False) -> pl.DataFr
 
 def get_label_table(
     version=VERSION,
-    threshold=None,
     live=False,
 ) -> pl.DataFrame:
     if live:
-        return _fetch_label_table.__wrapped__(
-            version=version, threshold=threshold, live=True
-        )
-    return _fetch_label_table(version=version, threshold=threshold, live=False)
+        return _fetch_label_table.__wrapped__(version=version, live=True)
+    return _fetch_label_table(version=version, live=False)
 
 
 def get_synapse_sizes(
