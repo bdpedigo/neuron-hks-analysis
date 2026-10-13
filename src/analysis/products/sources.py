@@ -60,6 +60,34 @@ DOMAIN_PREDICTIONS_PATH = (
     / DOMAIN_PREDICTIONS_PARAMS
 )
 
+STEP_PINS = {
+    "synapse_mapping": (SYNAPSE_MAPPING_VERSION, SYNAPSE_MAPPING_PARAMS),
+    "vertex_domains": (VERTEX_DOMAINS_VERSION, VERTEX_DOMAINS_PARAMS),
+    "domain_features": (DOMAIN_FEATURES_VERSION, DOMAIN_FEATURES_PARAMS),
+    "domain_edges": (DOMAIN_EDGES_VERSION, DOMAIN_EDGES_PARAMS),
+    "domain_predictions": (DOMAIN_PREDICTIONS_VERSION, DOMAIN_PREDICTIONS_PARAMS),
+}
+
+
+def deployment_path(product: str, datastack: str = DATASTACK) -> UPath:
+    """The deployment table of `product` for `datastack`, at the pinned step
+    version and parameter hash. The datastack is not part of the hash, so every
+    datastack shares the pins."""
+    version, params = STEP_PINS[product]
+    return BASE_CLOUD_PATH / datastack / product / version / params
+
+
+# NOTE: H01 is read at the time the labels were made (v1054), which CAVE no
+# longer serves as a version. The deployment reads synapses and nuclei from a
+# one-time snapshot of the job roots (meshmash-deployment
+# scripts/snapshot_inputs.py), so the products read the same rows from it.
+H01_DATASTACK = "h01_c3_flat"
+H01_VERSION = 1054
+H01_INPUTS_PATH = BASE_CLOUD_PATH / "_inputs" / H01_DATASTACK / f"v{H01_VERSION}"
+H01_SYNAPSES_PATH = (
+    H01_INPUTS_PATH / "synapses_using_sample_voxel_coords" / "post_pt_root_id"
+)
+
 # NOTE: the deployment tables are append-only, and the latest attempt per root
 # wins at read time. A read with an `as_of` cutoff ignores the attempts after
 # it, so a table that grows later (for example, the full run) reads the same.

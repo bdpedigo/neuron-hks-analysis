@@ -36,6 +36,7 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
+from analysis.products.cell_selection import select_cells, thalamic_roots as select_thalamic_roots
 from analysis import (
     CELL_TYPE_CATEGORIES,
     CELL_TYPE_PALETTE,
@@ -123,14 +124,11 @@ cell_info = (
 )
 
 
-proofread_info = cell_info.query(
-    "(cell_type_source == 'allen_v1_column_types_slanted_ref' or cell_type == 'TH') and axon_cleaned"
-)
+selection = select_cells(cell_info)
+proofread_info = cell_info.loc[selection.index[selection["is_proofread"]]]
 root_ids = proofread_info.index.unique()
-thalamic_roots = proofread_info.query("broad_type == 'thalamic'").index.unique()
-column_info = proofread_info.query(
-    "cell_type_source == 'allen_v1_column_types_slanted_ref'"
-).copy()
+thalamic_roots = select_thalamic_roots(selection)
+column_info = cell_info.loc[selection.index[selection["is_column"]]].copy()
 
 # %%
 

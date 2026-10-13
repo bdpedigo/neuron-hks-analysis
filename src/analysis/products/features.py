@@ -15,6 +15,7 @@ from .catalog import Tables
 from .deployment import latest_attempt, latest_attempts, scan_roots
 from .partitions import hash_partition
 from .sources import (
+    DATASTACK,
     DOMAIN_FEATURES_PARAMS,
     DOMAIN_FEATURES_PATH,
     DOMAIN_FEATURES_VERSION,
@@ -25,6 +26,7 @@ from .sources import (
     VERTEX_DOMAINS_PARAMS,
     VERTEX_DOMAINS_PATH,
     VERTEX_DOMAINS_VERSION,
+    deployment_path,
 )
 
 # NOTE: these views read the latest attempts, so they change as the deployment
@@ -55,7 +57,11 @@ Tables.register(
 
 
 def synapse_domain_join(
-    synapses: pl.DataFrame, domain_table: UPath, *, as_of: datetime
+    synapses: pl.DataFrame,
+    domain_table: UPath,
+    *,
+    as_of: datetime,
+    datastack: str = DATASTACK,
 ) -> pl.DataFrame:
     """`synapses` (with `root_id` and `synapse_id`) left-joined to the row of
     `domain_table` (a per-domain deployment table) for the domain of each synapse,
@@ -67,8 +73,8 @@ def synapse_domain_join(
     root_ids = synapses["root_id"].unique().to_list()
     mapping_lf, domains_lf, domain_rows_lf = latest_attempts(
         [
-            scan_roots(SYNAPSE_MAPPING_PATH, root_ids, as_of=as_of),
-            scan_roots(VERTEX_DOMAINS_PATH, root_ids, as_of=as_of),
+            scan_roots(deployment_path("synapse_mapping", datastack), root_ids, as_of=as_of),
+            scan_roots(deployment_path("vertex_domains", datastack), root_ids, as_of=as_of),
             scan_roots(domain_table, root_ids, as_of=as_of),
         ]
     )

@@ -8,7 +8,7 @@ from . import features  # noqa: F401 -- registers "synapse_to_domain", which the
 from .catalog import Tables
 from .deployment import latest_attempt
 from .features import synapse_domain_join
-from .sources import DOMAIN_PREDICTIONS_PATH
+from .sources import DATASTACK, DOMAIN_PREDICTIONS_PATH, deployment_path
 
 # NOTE: these views read the latest attempts, so they change as the deployment
 # writes. They are for exploration only. Products pin a cutoff.
@@ -28,11 +28,18 @@ Tables.register(
 )
 
 
-def synapse_posteriors(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame:
+def synapse_posteriors(
+    synapses: pl.DataFrame, *, as_of: datetime, datastack: str = DATASTACK
+) -> pl.DataFrame:
     """`synapses` left-joined to the posterior and `pred_label` of its domain
     (see `synapse_domain_join`).
 
     Unlike the deployment's `synapse_predictions`, this keeps a synapse with no
     prediction, with null values.
     """
-    return synapse_domain_join(synapses, DOMAIN_PREDICTIONS_PATH, as_of=as_of)
+    return synapse_domain_join(
+        synapses,
+        deployment_path("domain_predictions", datastack),
+        as_of=as_of,
+        datastack=datastack,
+    )

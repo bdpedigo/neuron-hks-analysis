@@ -17,7 +17,8 @@ class Table:
     table needs `cache_params`.
 
     A table with `cache_params` is always read from its cache, which is built on
-    first access. The cache is at `data/tables/v{VERSION}/{name}/{cache_key}.parquet`.
+    first access. The cache is at `data/tables/{folder}/{name}/{cache_key}.parquet`,
+    where `folder` defaults to `v{VERSION}`.
     To make a product's key change when an input changes, put the input's
     `cache_key` in the product's `cache_params`."""
 
@@ -27,6 +28,7 @@ class Table:
         build: Optional[Callable[[], pl.LazyFrame]] = None,
         cache_params: Optional[dict] = None,
         materialize: Optional[Callable[[Path], None]] = None,
+        folder: Optional[str] = None,
     ):
         if (build is None) == (materialize is None):
             raise ValueError(f"{name!r}: pass exactly one of `build` or `materialize`")
@@ -36,6 +38,7 @@ class Table:
         self._build = build
         self._materialize = materialize
         self.cache_params = cache_params
+        self.folder = folder or f"v{VERSION}"
 
     @cached_property
     def _plan(self) -> pl.LazyFrame:
@@ -60,7 +63,7 @@ class Table:
         key = self.cache_key
         if key is None:
             return None
-        return TABLE_PATH / f"v{VERSION}" / self.name / f"{key}.parquet"
+        return TABLE_PATH / self.folder / self.name / f"{key}.parquet"
 
     def ensure_cached(self, force: bool = False) -> Path:
         """Build the cache if it is missing, and return its path.
@@ -131,8 +134,11 @@ class TableRegistry:
         build: Optional[Callable[[], pl.LazyFrame]] = None,
         cache_params: Optional[dict] = None,
         materialize: Optional[Callable[[Path], None]] = None,
+        folder: Optional[str] = None,
     ) -> Table:
-        table = Table(name, build, cache_params=cache_params, materialize=materialize)
+        table = Table(
+            name, build, cache_params=cache_params, materialize=materialize, folder=folder
+        )
         self._tables[name] = table
         return table
 

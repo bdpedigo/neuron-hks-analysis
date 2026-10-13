@@ -4,6 +4,11 @@ import numpy as np
 import polars as pl
 from standard_transform.datasets import minnie_transform_vx
 
+from .products.cell_selection import (
+    column_roots as select_column_roots,
+    proofread_roots as select_proofread_roots,
+    select_cells,
+)
 from .io import (
     BROAD_TYPE_CATEGORIES,
     CELL_TYPE_CATEGORIES,
@@ -67,14 +72,9 @@ cell_info = (
     .set_index("pt_root_id")
 )
 
-proofread_info = cell_info.query(
-    "(cell_type_source == 'allen_v1_column_types_slanted_ref' or cell_type == 'TH') and axon_cleaned"
-)
-proofread_roots = proofread_info.index.unique()
-
-column_roots = proofread_info.query(
-    "cell_type_source == 'allen_v1_column_types_slanted_ref'"
-).index.unique()
+selection = select_cells(cell_info)
+proofread_roots = select_proofread_roots(selection)
+column_roots = select_column_roots(selection)
 
 
 cell_info_pl = pl.LazyFrame(cell_info.reset_index())
