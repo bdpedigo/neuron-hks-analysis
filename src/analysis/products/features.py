@@ -7,6 +7,7 @@ from pathlib import Path
 
 import polars as pl
 from tqdm.auto import tqdm
+from upath import UPath
 
 from . import labels  # noqa: F401 -- registers "labels", whose cache key P2 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", which the training view reads
@@ -53,18 +54,22 @@ Tables.register(
 )
 
 
-def synapse_features(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame:
-    """`synapses` (with `root_id` and `synapse_id`) left-joined to its domain features,
+def synapse_domain_join(
+    synapses: pl.DataFrame, domain_table: UPath, *, as_of: datetime
+) -> pl.DataFrame:
+    """`synapses` (with `root_id` and `synapse_id`) left-joined to the row of
+    `domain_table` (a per-domain deployment table) for the domain of each synapse,
     as the deployment tables were at `as_of`.
 
-    Features are null for a synapse whose root the deployment has not processed.
+    The domain columns are null for a synapse whose root the deployment has not
+    processed.
     """
     root_ids = synapses["root_id"].unique().to_list()
-    mapping_lf, domains_lf, features_lf = latest_attempts(
+    mapping_lf, domains_lf, domain_rows_lf = latest_attempts(
         [
             scan_roots(SYNAPSE_MAPPING_PATH, root_ids, as_of=as_of),
             scan_roots(VERTEX_DOMAINS_PATH, root_ids, as_of=as_of),
-            scan_roots(DOMAIN_FEATURES_PATH, root_ids, as_of=as_of),
+            scan_roots(domain_table, root_ids, as_of=as_of),
         ]
     )
     mapping = (
@@ -86,8 +91,8 @@ def synapse_features(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame
     synapse_domains = mapping.join(
         domains, on=["root_id", "mesh_index"], how="left"
     ).drop("mesh_index")
-    features = (
-        features_lf.join(
+    domain_rows = (
+        domain_rows_lf.join(
             synapse_domains.lazy().select("root_id", "domain_id").drop_nulls().unique(),
             on=["root_id", "domain_id"],
             how="semi",
@@ -96,9 +101,14 @@ def synapse_features(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame
     )
     return (
         synapses.join(synapse_domains, on=["root_id", "synapse_id"], how="left")
-        .join(features, on=["root_id", "domain_id"], how="left")
+        .join(domain_rows, on=["root_id", "domain_id"], how="left")
         .drop("domain_id")
     )
+
+
+def synapse_features(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame:
+    """`synapses` left-joined to its domain features (see `synapse_domain_join`)."""
+    return synapse_domain_join(synapses, DOMAIN_FEATURES_PATH, as_of=as_of)
 
 
 def _write_part(synapses: pl.DataFrame, part: Path, as_of: datetime) -> None:

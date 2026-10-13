@@ -1,86 +1,53 @@
 # %%
-from pathlib import Path
-
+import numpy as np
 import polars as pl
 import seaborn as sns
 from matplotlib import pyplot as plt
-from sklearn.metrics import accuracy_score, classification_report, f1_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_recall_curve,
+    roc_curve,
+)
 
-from meshrep import (
+from analysis import (
     CELL_TYPE_CATEGORIES,
     CELL_TYPE_PALETTE,
-    TABLE_PATHS,
+    Tables,
+    cell_type_mapper,
     save_matplotlib_figure,
     save_variables,
     set_matplotlib_theme,
 )
 
-
-def cell_type_mapper(cell_type):
-    match cell_type:
-        case "23P":
-            return "2/3P-IT"
-        case "4P":
-            return "4P-IT"
-        case "5P-PT":
-            return "5P-ET"
-        case _:
-            return cell_type
-
-
-data_path = Path("/Users/ben.pedigo/code/meshrep/meshrep/data/validation")
-cols = [
-    "synapse_id",
-    "pre_pt_root_id",
-    "post_pt_root_id",
-    "post_cell_type",
-    "post_nucleus_id",
-    "tag",
-]
-exc_labels = pl.read_csv(data_path / "exc_sample_synapses_labeled.csv").select(cols)
-inh_labels = pl.read_csv(data_path / "inh_sample_synapses_labeled.csv").select(cols)
-labels = pl.concat([exc_labels, inh_labels])
-labels = labels.rename({"tag": "manual_label"})
-
-predictions = pl.scan_delta(TABLE_PATHS["prediction"]).filter(
-    pl.col("synapse_id").is_in(labels["synapse_id"].to_list())
-)
-predictions = predictions.rename({"label": "predicted_label"})
-predictions = predictions.collect()
-
 # %%
-predictions = predictions.join(labels, on="synapse_id", how="full")
-predictions = predictions.filter(
-    pl.col("manual_label").is_not_null(),
-    pl.col("predicted_label").is_not_null(),
-    pl.col("predicted_label") != "unknown",
-    pl.col("manual_label") != "other",
-)
-
-# %%
-predictions = predictions.with_columns(
-    (predictions["predicted_label"] == predictions["manual_label"]).alias("is_correct"),
-    (
-        pl.col("post_cell_type")
-        .replace(
-            {
-                "23P": "Excitatory",
-                "4P": "Excitatory",
-                "5P-IT": "Excitatory",
-                "5P-PT": "Excitatory",
-                "5P-ET": "Excitatory",
-                "5P-NP": "Excitatory",
-                "6P-CT": "Excitatory",
-                "6P-IT": "Excitatory",
-                "BC": "Inhibitory",
-                "BPC": "Inhibitory",
-                "MC": "Inhibitory",
-                "NGC": "Inhibitory",
-            }
-        )
+# NOTE: the one synapse with no prediction is not on its cell, and its tag is
+# "other", so the tag filter also drops it.
+predictions = (
+    Tables["validation_predictions"]
+    .lazy()
+    .filter(pl.col("tag") != "other")
+    .rename(
+        {
+            "tag": "manual_label",
+            "pred_label": "predicted_label",
+            "posterior_spine": "p_spine",
+        }
+    )
+    .with_columns(
+        pl.col("label_set")
+        .replace_strict({"exc": "Excitatory", "inh": "Inhibitory"})
         .alias("post_broad_type")
-    ),
+    )
+    .collect()
 )
+assert predictions["predicted_label"].null_count() == 0
+predictions = predictions.with_columns(
+    (pl.col("predicted_label") == pl.col("manual_label")).alias("is_correct")
+)
+save_variables(validation_n_synapses=len(predictions), format="{:,}")
+
 # %%
 predictions["is_correct"].mean()
 
@@ -96,29 +63,13 @@ acc_data = (
 
 set_matplotlib_theme()
 
-CELL_TYPE_PALETTE["5P-PT"] = CELL_TYPE_PALETTE["5P-ET"]
-
 fig, ax = plt.subplots(figsize=(8.67, 5.85))
 
-acc_data = acc_data.with_columns(
-    acc_data["post_cell_type"]
-    .replace(
-        {
-            "23P": "Excitatory",
-            "4P": "Excitatory",
-            "5P-IT": "Excitatory",
-            "5P-PT": "Excitatory",
-            "5P-ET": "Excitatory",
-            "5P-NP": "Excitatory",
-            "6P-CT": "Excitatory",
-            "6P-IT": "Excitatory",
-            "BC": "Inhibitory",
-            "BPC": "Inhibitory",
-            "MC": "Inhibitory",
-            "NGC": "Inhibitory",
-        }
-    )
-    .alias("broad_type")
+acc_data = acc_data.join(
+    predictions.select(
+        "post_cell_type", pl.col("post_broad_type").alias("broad_type")
+    ).unique(),
+    on="post_cell_type",
 ).rename({"post_cell_type": "cell_type"})
 
 sns.stripplot(
@@ -188,7 +139,7 @@ total_weighted_f1 = f1_score(
     total_predictions["manual_label"],
     total_predictions["predicted_label"],
     average="weighted",
-) 
+)
 
 save_variables(
     total_accuracy=total_accuracy,
@@ -227,6 +178,8 @@ save_variables(
     exc_accuracy=exc_accuracy,
     exc_macro_f1=exc_macro_f1,
     exc_weighted_f1=exc_weighted_f1,
+    # NOTE: the paper text and the H01 comparison read the weighted F1 by this name.
+    exc_f1=exc_weighted_f1,
     prefix="validation_",
     format="{:.3f}",
 )
@@ -445,28 +398,12 @@ predictions = predictions.with_columns(
     .replace({"soma": "not_spine", "shaft": "not_spine"})
     .alias("manual_is_spine_label"),
 )
-import numpy as np
-from sklearn.metrics import precision_score, recall_score
-
-rows = []
-for threshold in np.linspace(0, 1, 101):
-    subset = predictions.filter(
-        pl.col("p_spine") >= threshold, pl.col("manual_label").is_not_null()
-    )
-    y_true = subset["manual_is_spine_label"].to_list()
-    y_pred = subset["predicted_is_spine_label"].to_list()
-    precision = precision_score(y_true, y_pred, pos_label="spine", zero_division=0)
-    recall = recall_score(y_true, y_pred, pos_label="spine", zero_division=0)
-
-    rows.append(
-        {
-            "threshold": threshold,
-            "precision": precision,
-            "recall": recall,
-        }
-    )
-pr_data = pl.DataFrame(rows)
-
+precision, recall, _ = precision_recall_curve(
+    predictions["manual_is_spine_label"].to_list(),
+    predictions["p_spine"].to_list(),
+    pos_label="spine",
+)
+pr_data = pl.DataFrame({"precision": precision, "recall": recall})
 
 fig, ax = plt.subplots(figsize=(6, 6))
 ax.plot(pr_data["recall"], pr_data["precision"], marker=".")
@@ -475,8 +412,6 @@ ax.set_ylabel("Precision")
 ax.set_title("Precision-Recall Curve for Spine Synapse Detection")
 
 # %%
-from sklearn.metrics import roc_curve
-
 y_true = predictions["manual_is_spine_label"].to_list()
 y_scores = predictions["p_spine"].to_list()
 fpr, tpr, thresholds = roc_curve(y_true, y_scores, pos_label="spine")

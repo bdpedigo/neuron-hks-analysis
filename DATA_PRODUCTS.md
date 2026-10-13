@@ -27,9 +27,13 @@ Scope labels used below:
 
 ## Conventions
 
-- **One configuration file** holds the origin, pin and kind of every source. The `Tables` registry is the only way that scripts load data. Scripts move over one at a time.
+- [ ] **One configuration file** holds the origin, pin and kind of every source. The `Tables` registry is the only way that scripts load data. Scripts move over one at a time.
+  - Partly done: `products/sources.py` holds the deployment origins and pins. It has no kind field yet, and only `train.py` reads through the registry.
 - **Product scripts and figure scripts are separate.** Product scripts read the cloud and write local caches. Figure scripts read only local caches.
-- **No loads at import time.** Remove the module-level `load_neuron_info` call in `src/analysis/tables.py`.
+- **Glued variables come only from scripts.** The scripts write `glued_variables.tex` in this repo (`save_variables`). The paper reads that whole file. Do not edit or copy single values by hand.
+  - [ ] Point the paper at the generated file. Do this when every key that `ssa/main.tex` uses has a generator here. Now 45 keys of `ssa/glued_variables.tex` have no generator, from scripts that are not ported yet (for example `profile_*`, `unitary_spines_*`, `column_summary_*`).
+  - `save_variables` never removes a key. Before the switch, delete the keys that no script writes any more, for example `params_simplify_target_reduction`.
+- [ ] **No loads at import time.** Remove the module-level `load_neuron_info` call in `src/analysis/tables.py` (still at line 62).
 - **Join on stable IDs.**
   - `synapse_id` is stable. Use it to join synapse-level data across versions.
   - Use the nucleus ID (from the soma table) to identify a cell across versions. Take `root_id` from the v1822 synapse or nucleus table. Only 582 of 1,333 column cells keep the same root ID between v1412 and v1822.
@@ -39,12 +43,13 @@ Scope labels used below:
   - `as_of` is a cutoff on `attempt_id`.
   - The deployment sets `delta.logRetentionDuration` to 24 hours and `delta.deletedFileRetentionDuration` to 6 hours. It runs OPTIMIZE and VACUUM on a schedule. So a Delta version number stops working after about a day.
   - The tables are append-only, and the latest attempt per root wins at read time. OPTIMIZE rewrites files but keeps every row. So `attempt_id <= as_of`, applied before the latest-attempt filter, gives the same rows at any later time.
-  - Put each table's `as_of` in the configuration file and in the cache key. Then a cache rebuilds only after a deliberate change to `as_of`.
+  - [x] Put each table's `as_of` in the configuration file and in the cache key. Then a cache rebuilds only after a deliberate change to `as_of`. Done for P2: `LABELED_AS_OF` in `products/sources.py` is in the P2 cache key.
   - Set `as_of` after a job finishes. An attempt that starts before `as_of` and commits after it appears only in later reads.
   - Two events break the pin: a deletion of old attempts, or a move of the table to a new `p-…` path. A new path means new parameters, so that is a deliberate change.
   - A product built from deployment tables without an `as_of` is frozen, not rebuildable. For example, the full run can process the 6,010 labeled roots again. Their new attempts then win, and an unpinned P2 changes.
-- **Store frozen files in a versioned location** (git LFS, or a write-once prefix in the bucket). Now they exist only on the laptop. `git ls-files data` shows only `ctype_hues.pkl`, and the LFS rules in `data/.gitattributes` name old file paths that no longer exist.
-- **Tooling.** If the cache of a registered table is missing, `just materialize NAME` builds it. `--force` rebuilds it. `just status` lists each registered table with its kind and cache state. It also lists the other files in the version folder: stale cache keys, interrupted builds, and files not in the registry. Product code is in `src/analysis/products/`, and the CLI is `scripts/tables.py`. When the frozen kind exists, `status` must never mark a frozen file as an orphan.
+- [ ] **Store frozen files in a versioned location** (git LFS, or a write-once prefix in the bucket). Now they exist only on the laptop. `git ls-files data` shows only `ctype_hues.pkl`, and the LFS rules in `data/.gitattributes` name old file paths that no longer exist.
+- [x] **Tooling.** If the cache of a registered table is missing, `just materialize NAME` builds it. `--force` rebuilds it. `just status` lists each registered table with its kind and cache state. It also lists the other files in the version folder: stale cache keys, interrupted builds, and files not in the registry. Product code is in `src/analysis/products/`, and the CLI is `scripts/tables.py`.
+  - [ ] Add the frozen kind. The registry kinds are now `materialized`, `cached build` and `uncached`. After the frozen kind exists, `status` must never mark a frozen file as an orphan.
 
 ---
 
@@ -57,7 +62,7 @@ Scope labels used below:
 | S0 | CAVE `synapses_pni_2`, as the Delta export at `gs://mat_dbs/public/deltalake_exports/minnie65_phase3_v1/v1822/synapses_pni_2/post_pt_root_id` | v1822 (in the path) | none (selection rows go to P9) | cloud | all | exists |
 | S1 | CAVE `minnie65_public`: view `aibs_cell_info`, table `proofreading_status_and_strategy` | v1822 | `data/tables/v1822/{aibs_cell_info,proofreading_status_and_strategy}.parquet` | rebuildable | all cells | cached |
 | S2 | Deployment tables `synapse_mapping`, `vertex_domains`, `domain_features` at `gs://bdp-ssa/meshmash-deployment/minnie65_phase3_v1/…` | step version + `p-…` hash (in the path) + `as_of` | none (labeled rows go to P2) | cloud | labeled roots now (job `microns_top_labeled`, 6,010 roots), then **all** after the full run | partial |
-| S3 | Deployment tables `domain_predictions` (full `posterior_<class>`) + `synapse_predictions` (argmax summary only) | as S2, and the `p-…` hash includes the P3 model URI | none | cloud | all | not run, needs P3 registered as an MLflow URI |
+| S3 | Deployment tables `domain_predictions` (full `posterior_<class>`) + `synapse_predictions` (argmax summary only) | as S2, and the `p-…` hash includes the P3 model URI | none | cloud | validation roots now (job `microns_validation`, 132 roots), then **all** after the full run | partial. The model is P3 `gs://bdp-ssa/meshmash-deployment/models/ssa_model_full_v1` |
 | S4 | Deployment tables `structure_morphometry` + `vertex_structures` (spines) | as S2 | none | cloud | all | not run (50-root `spine_trial` only) |
 | S5 | Skeletons at `gs://csm-skel/osy/minnie65/skel/{root}.osy` | root ID. Make sure that files are not overwritten in place. | none (fields go to P8) | cloud | proofread + column cells | exists |
 | S6 | CAVE annotation tables `vortex_compartment_targets`, `bdp_synapse_compartment_labels`, `bdp_point_compartment_labels` | v1822 timestamp, for both annotations and segmentation (`live=False`, the default, in `products/labels.py`) | P1 | rebuildable | labeled | exists |
@@ -85,7 +90,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 **P1 `labels`** (labeled, 5 MB)
 - Origin: S6. Pin: v1822 timestamp (annotations and segmentation). Cache: `data/tables/v1822/labels/{hash}.parquet`. Kind: rebuildable.
 - [x] Registered as `labels` in `products/labels.py` (cache key: `version`). `get_label_table(live=True)` queries annotations at the current time and skips the cache.
-- [x] Validation cells are excluded. The exclusion reads the root IDs from P16. On 2026-10-11, the cached table had 0 rows on the 132 validation roots and none of the 3,300 validation `synapse_id`s. The validation roots come from the S9 nucleus IDs, mapped to v1822 through S1.
+- [x] Validation cells are excluded. The exclusion reads the root IDs from P16. The cached table had 0 rows on the 132 validation roots and none of the 3,300 validation `synapse_id`s. The validation roots come from the S9 nucleus IDs, mapped to v1822 through S1.
 - [x] Fixed the path in `get_validation_ids` (`data/tables/general/` → `data/tables/validation/`).
 
 **P16 `validation_cells`** (validation, 132 rows)
@@ -99,16 +104,16 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 - [x] `products/sources.py` points at the s3 paths, with `as_of` = 2026-10-12 04:13 UTC. The labeled job is complete, except for 1 root (a large merge that cannot be processed).
 - [x] Rebuild: `just materialize labeled_synapse_features`.
 - [x] Keep the three old s2 `labeled_synapse_features-*` files in `data/tables/v1822/` until P3 is retrained. The s2 paths are gone, so these files are the only copy of the features that `synapse_hks_model_on_bulk` was trained on.
-- [ ] P3 is retrained on s3 (2026-10-12). Delete or archive the three old s2 files.
+- [ ] P3 is retrained on s3. Delete or archive the three old s2 files.
 - [x] After the build: check the share of label synapses with non-null features, and check the failed merge root for partial rows from a crashed attempt.
-  - Result (2026-10-12): 111,640 of 133,686 synapse labels (83.5%) have all features, on 6,009 roots. The other synapse labels are on 12,683 roots with fewer than 5 labels, which the job did not include. The failed root `864691135858491438` (17 labels) has no rows, so no partial attempt is in the table. 10 roots have features for only some of their synapses.
+  - Result: 111,640 of 133,686 synapse labels (83.5%) have all features, on 6,009 roots. The other synapse labels are on 12,683 roots with fewer than 5 labels, which the job did not include. The failed root `864691135858491438` (17 labels) has no rows, so no partial attempt is in the table. 10 roots have features for only some of their synapses.
 
 **P3 HKS synapse model**
 - Origin: P2, by `scripts/model/train.py`. Pin: P2 + training parameters + random seed. Cache: `data/models/`. Kind: frozen, because S3 depends on this exact model. Keep it in MLflow.
-- [x] Retrain on the s3 feature columns (2026-10-12): 111,640 training synapses. `train.py` selects features by prefix (`hks_`, `curvature_`, `normal_`), so it uses the s3 columns without changes.
+- [x] Retrain on the s3 feature columns: 111,640 training synapses. `train.py` selects features by prefix (`hks_`, `curvature_`, `normal_`), so it uses the s3 columns without changes.
   - `distance_to_nucleus` is added locally, after P2. A new product `root_nuclei` (`products/nuclei.py`) holds every nucleus point on each root in nm. It comes from CAVE `nucleus_detection_lookup_v1` at v1822, and a root can have several rows. The uncached view `training_features` = P2 ⋈ `root_nuclei` adds the distance from `domain_x/y/z` to the **nearest** nucleus on the root. It is null for a root with no nucleus, and the random forest accepts the missing values.
   - [x] Build `root_nuclei` (`just materialize root_nuclei`, a CAVE query), then re-run the training.
-- [x] Train three model variants (2026-10-12). `MODEL_SPECS` in `train.py` defines them. All three use the same 111,640 rows and the same `RF_PARAMS`.
+- [x] Train three model variants. `MODEL_SPECS` in `train.py` defines them. All three use the same 111,640 rows and the same `RF_PARAMS`.
 
   | Variant | Features | Classes |
   |---|---|---|
@@ -116,36 +121,70 @@ The original records of these labels are neuroglancer states or notebooks. A sta
   | `ssa_model_no_nuc` | 74 spectral | shaft, soma, spine |
   | `ssa_model_binary` | 74 spectral | not_spine, spine (soma and shaft merged) |
 
-  - Each variant saves to `data/models/{variant}_{MODEL_VERSION}`, for example `data/models/ssa_model_full_v1`. The folder name is also the published name. The `trained_on` metadata in the model records the feature table (`DOMAIN_FEATURES_VERSION` + `DOMAIN_FEATURES_PARAMS`). The random forest and the learning-curve sampling are seeded.
+  - [x] Each variant saves to `data/models/{variant}_{MODEL_VERSION}`, for example `data/models/ssa_model_full_v1`. The folder name is also the published name. The `trained_on` metadata in the model records the feature table (`DOMAIN_FEATURES_VERSION` + `DOMAIN_FEATURES_PARAMS`). The random forest and the learning-curve sampling are seeded.
   - Published names are write-once. Bump `MODEL_VERSION` in `train.py` (`v1` → `v2`) for each retrained model that you publish.
-  - `ssa_model_full` is the main model (`MAIN_MODEL`). The learning curve, the glued variables, and every downstream figure use only `ssa_model_full`.
-  - Learning curve weighted F1 for `ssa_model_full`: 0.959 at 1% of the data and 0.966 at 10%. The model without `distance_to_nucleus` had 0.958 and 0.965. The paper had 0.935 and 0.948.
-  - [ ] Run `train.py` once more to write the three `ssa_model_*_v1` folders. Then delete the folders from earlier runs in `data/models/`:
+  - [x] `ssa_model_full` is the main model (`MAIN_MODEL`). The learning curve, the glued variables, and every downstream figure use only `ssa_model_full`.
+  - Result: learning curve weighted F1 for `ssa_model_full`: 0.959 at 1% of the data and 0.966 at 10%. The model without `distance_to_nucleus` had 0.958 and 0.965. The paper had 0.935 and 0.948.
+  - [x] Run `train.py` once more to write the three `ssa_model_*_v1` folders. Then delete the folders from earlier runs in `data/models/`:
     - `synapse_hks_model-s3-p-e758527c9d981378` and `synapse_hks_model-s3-p-e758527c9d981378-distance_to_nucleus`
     - `synapse_hks_model-s3-p-e758527c9d981378-{full,no_nucleus,spine_binary}`
     - `ssa_model_{full,no_nuc,binary}-s3-p-e758527c9d981378`
-- [ ] Register the model for the deployment, so that S3 can run. In meshmash-deployment, run `just publish-model ../meshrep/neuron-hks-analysis/data/models/ssa_model_full_v1`. The published name defaults to the folder name, and the upload is write-once.
-  - The deployment can run all three variants. Its domain prediction step computes `distance_to_nucleus` with the same rule as `root_nuclei` (meshmash-deployment `TASK-99`, done 2026-10-12). The column is not in `domain_features`.
-- [ ] Panel outputs: learning curve (Fig S2), glued `model_n_training_synapses`, `model_sample_curve_*`, `params_rf_max_depth`, `params_rf_n_estimators`.
-  - The last run of `train.py` (2026-10-12) wrote all of these from `ssa_model_full`.
+- [x] Register the model for the deployment, so that S3 can run. In meshmash-deployment, run `just publish-model ../meshrep/neuron-hks-analysis/data/models/ssa_model_full_v1`. The published name defaults to the folder name, and the upload is write-once.
+  - Published to `gs://bdp-ssa/meshmash-deployment/models/ssa_model_full_v1`. Content hash `m-d0631a8065374702`. A job spec gives this URI as `domain_predictions.model`. Only `ssa_model_full_v1` is published.
+  - The deployment can run all three variants. Its domain prediction step computes `distance_to_nucleus` with the same rule as `root_nuclei` (meshmash-deployment `TASK-99`). The column is not in `domain_features`.
+- [x] Panel outputs: learning curve (Fig S2), glued `model_n_training_synapses`, `model_sample_curve_*`, `params_rf_max_depth`, `params_rf_n_estimators`.
+  - The last run of `train.py` wrote all of these from `ssa_model_full`.
   - The old `params_*` came from `meshrep/clean_paper_code/count_things.py`. `train.py` now writes the two `params_rf_*` variables from `RF_PARAMS`, with the same keys.
-  - [ ] The other `params_*` variables describe the `condensed_spectral` step, not the model. They have no generator yet.
-    - Variables: `params_max_eigenvalue`, `params_t_min`, `params_t_max`, `params_n_components`, `params_simplify_*`, `params_max_overlap_neighbors`, `params_overlap_distance`, `params_*_vertex_threshold`, `params_mollify_factor`, `params_distance_threshold`.
-    - New home: a separate script. It reads the resolved `condensed_spectral` parameters of the S2 run and writes them with the same keys.
-    - The S2 run is `DOMAIN_FEATURES_VERSION` + `DOMAIN_FEATURES_PARAMS` in `products/sources.py`.
-    - Some names can differ from the old cloud-mesh run. Map each old name to a parameter of `meshmash.condensed_spectral_pipeline`.
+  - [x] The other `params_*` variables describe the `condensed_spectral` step, not the model. `scripts/pipeline_params.py` writes them.
+    - The script reads the resolved parameters of the S2 run from `_meshmash/identity.json` in the `domain_features` table folder. It asserts that the step version and the parameter hash match `products/sources.py`.
+    - Same keys as before: `params_max_eigenvalue`, `params_t_min`, `params_t_max`, `params_n_components`, `params_simplify_agg`, `params_max_overlap_neighbors`, `params_overlap_distance`, `params_max_vertex_threshold`, `params_min_vertex_threshold`, `params_mollify_factor`, `params_distance_threshold`.
+    - New keys: `params_simplify_target_density`, `params_target_vertices`, `params_n_scales`.
+    - Removed key: `params_simplify_target_reduction`. The S2 run simplifies to a vertex density, not a reduction fraction.
+    - Changed values: `params_max_overlap_neighbors` 60,000 → 50,000, `params_overlap_distance` 20 → 10 microns, `params_min_vertex_threshold` 200 → 10.
+    - The methods text in `ssa/main.tex` has `% TODO` notes where the description is out of date: simplification, mesh splitting, overlap, and the curvature and normal features.
+    - [ ] Rewrite the simplification text in `ssa/main.tex`. It still uses `params_simplify_target_reduction`, which no script writes.
 
-**P4 `validation_predictions`** (validation, about 3.3k rows)
-- Origin: S9 ⋈ P16 ⋈ P15 for those synapses ⋈ S7. Pin: S9 + S2 + S3 + v1822. Kind: rebuildable.
+**P4 `validation_predictions`** (validation, 3,300 rows)
+- Origin: S9 ⋈ P16 ⋈ P15 for those synapses ⋈ S7. Pin: S9 + S2 + S3 (`as_of`) + v1822. Cache: `data/tables/v1822/validation_predictions/{hash}.parquet`. Kind: rebuildable.
+- [x] Registered as `validation_predictions` in `products/validation.py`. The cache key includes the `validation_labels` cache key, `VALIDATION_AS_OF` and the S2 and S3 versions and parameter hashes.
+  - It is `validation_labels` ⋈ `synapse_posteriors(as_of=VALIDATION_AS_OF)` ⋈ the S7 NEURD labels. The NEURD columns are `neurd_id`, `neurd_value`, `neurd_detailed_label` and `neurd_label`. `neurd_label` is null for the two NEURD axon classes.
+  - The posteriors join on `root_id` (the cell). So the one synapse that is not on its cell (`244492646`, tag `other`) has null posteriors. All other 3,299 synapses have a prediction.
+  - NEURD labels 2,229 of the 3,300 synapses. 8 of them are axon classes.
 - Map S9 forward on `synapse_id` (labels) and `post_nucleus_id` (cells). Do not use the root IDs stored in the files.
 - The predictions come from the deployment (S2 + S3), not from a local run.
-- [ ] Run a deployment job for the 132 validation roots. Take the root list from P16. On 2026-10-11, none of them was in `microns_top_labeled`. The full run also covers them.
-- [ ] Port `scripts/validation/validation.py`. It still imports `meshrep` and reads the old prediction lake.
-- [ ] Panel outputs:
-  - Fig 3B (accuracy by cell type), Fig S9 (confusion matrices).
-  - Fig S3 (NEURD vs HKS), ported from `meshrep/clean_paper_code/compare_to_neurd.py`.
-  - Glued `validation_*` and `compare_*`.
-- [ ] `validation_exc_f1` (0.977) has no generator in any script. Make the validation script write it.
+- [x] Registered the label side as `validation_labels` in `products/labels.py` (cache key: `version` + the `validation_cells` cache key). It holds S9 ⋈ P16 ⋈ the v1822 synapse table, 3,300 rows.
+  - `root_id` is the cell (from `post_nucleus_id` through P16), and `post_pt_root_id` is the v1822 post root of the synapse. `on_cell` is true when the two are the same.
+  - Result: all 3,300 `synapse_id`s exist at v1822. 3,299 are on their cell. The one synapse that is not (`244492646`) has the tag `other`, which the validation drops. 625 rows have a different post root ID than the one stored in the files.
+  - The `point` column in the files is the synapse `ctr_pt_position` in voxels (4, 4, 40 nm), so the table keeps only `ctr_pt_position_{x,y,z}` in nm.
+- [x] Run a deployment job for the 132 validation roots. Take the root list from P16. None of them was in `microns_top_labeled`. The full run also covers them.
+  - The job is `microns_validation` in meshmash-deployment. Its `validation_cells.parquet` is a copy of the P16 cache.
+  - Run `run-20261012-235436-628a`: all 132 roots passed all four steps. The last commit was at 2026-10-13 04:57 UTC. `VALIDATION_AS_OF` in `products/sources.py` is 05:00 UTC.
+  - The output paths are the paths in `products/sources.py`: `domain_predictions/s1/p-96cea889064d4d41`, with S2 at the same paths as P2. Each root has one attempt.
+- [x] Port `scripts/validation/validation.py`. It reads only `validation_predictions`.
+  - The broad type comes from `label_set` (`exc` or `inh`), which matches the cell types exactly.
+  - The precision-recall plot (not in the paper) now uses `precision_recall_curve`. The old loop failed on an empty threshold, and it did not threshold the predictions.
+- [x] Port `meshrep/clean_paper_code/compare_to_neurd.py` to `scripts/validation/compare_to_neurd.py`. It reads only `validation_predictions`.
+- [x] Delete the old validation draft after `quit()` in `scripts/model/train.py`, and the imports that only the draft used.
+- [x] Panel outputs:
+  - Fig 3B (`figures/validation/validation_accuracy_by_cell_type`), Fig S9 (`validation_confusion_matrices`), and the ROC curve.
+  - Fig S3 (`figures/compare_to_neurd/compare_neurd_hks_by_cell_type`).
+  - Glued `validation_*` and `compare_*`. New keys: `validation_n_synapses` (3,294) and `compare_n_synapses` (2,219).
+- [x] `validation_exc_f1` is now written by `validation.py`. It is the excitatory weighted F1, the same value as `validation_exc_weighted_f1`.
+- Result, old paper value → new value:
+
+  | Variable | Old | New |
+  |---|---|---|
+  | `validation_total_accuracy` | 0.961 | 0.966 |
+  | `validation_total_weighted_f1` | 0.961 | 0.966 |
+  | `validation_total_macro_f1` | 0.969 | 0.973 |
+  | `validation_exc_f1` / `validation_exc_weighted_f1` | 0.977 | 0.980 |
+  | `validation_inh_weighted_f1` | 0.935 | 0.943 |
+  | `validation_inh_macro_f1` | 0.925 | 0.932 |
+  | `compare_hks_weighted_f1` | 0.963 | 0.969 |
+  | `compare_neurd_weighted_f1` | 0.842 | 0.842 |
+
+  The NEURD scores did not change, so the label side and the NEURD join agree with the old run.
+- [ ] P5: read the MICrONS bar in Fig 6A from `validation_exc_f1`, not the hard-coded 0.977.
 
 **P5 `h01_validation`** (H01 labeled, small)
 - Origin: S12 ⋈ S13, joined the same way as P15. Pin: S12 + S13. Kind: rebuildable.
@@ -206,14 +245,18 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 
 **P15 `synapse_posteriors`** (all)
 - Origin: S2 `synapse_mapping` ⋈ `vertex_domains` ⋈ S3 `domain_predictions`. Pin: S2 + S3. Kind: cloud (a lazy join).
+- [x] Register `synapse_posteriors`. The code is in `products/predictions.py`. P4 is the first product that reads it, on the 132 validation roots (68 seconds).
+  - `synapse_posteriors(synapses, as_of=...)` is the pinned read for products such as P4. The `synapse_posteriors` view in the registry reads the latest attempts, for exploration only.
+  - It shares `synapse_domain_join` with P2 (`products/features.py`). The refactored P2 read matched the P2 cache on 52 synapses from 5 roots.
+  - `products/sources.py` has the `domain_predictions` path `s1/p-96cea889064d4d41`. The `microns_validation` run wrote to this path. A change to the model or to the deployment step code moves this hash.
 - Gives the full posterior (`posterior_spine`, `posterior_shaft`, `posterior_soma`) and `pred_label` per synapse. No change to the deployment is needed.
 - `synapse_predictions` takes its values from the domain that each synapse maps to, so it is a subset of this join. `synapse_predictions` drops synapses that have no prediction, but the join keeps them with null values.
 - Figures use only `pred_label` (`tag`). Keep the posteriors for the validation ROC and the public tables.
 - Cost: the join reads all of `vertex_domains` for each root, about 1.7 MB per root. That is 9.95 GiB for the 6,010 labeled roots, or about 125 GB for the full run. P7 reads `vertex_structures` in the same way. Together, that is about 6 hours on the laptop, and the chunked build resumes after a stop. For comparison, P2 also reads `domain_features` (33.7 GiB for the labeled roots) and took about an hour.
-- Decision (2026-10-12): accept this cost and do not change the pipeline. If the all-synapse products need frequent rebuilds, add a deployment step like `synapse_predictions`. The new step writes one row per synapse: `synapse_id`, `domain_id`, `structure_id`. Do not z-order on a "has synapse" flag.
+- Decision: accept this cost and do not change the pipeline. If the all-synapse products need frequent rebuilds, add a deployment step like `synapse_predictions`. The new step writes one row per synapse: `synapse_id`, `domain_id`, `structure_id`. Do not z-order on a "has synapse" flag.
 
 **Pre-side aggregations** (`pre_synapse_aggregation`, `pre_synapse_to_exc`, `pre_synapse_to_inh`)
-- Recommendation: **drop these as stored products** and compute them in the figure script from P9 (1,352 rows each).
+- [ ] Recommendation: **drop these as stored products** and compute them in the figure script from P9 (1,352 rows each).
 - `pre_to_inh` is never read. Most `pre_*` columns that the figures use are already recomputed in-script.
 
 ### Method benchmark track
@@ -221,7 +264,8 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 **P14 `profile_benchmark`** (Fig 2B-E, `profile_*` glue)
 - Origin: S8. Pin: the S8 run names. Kind: rebuildable (only the figures are local).
 - A re-run on the new pipeline is likely. The fair way to compare the two approaches is still open (question 1).
-- The save call for 2D (`test_accuracy_comparison_zoom`) is commented out in `profile_approaches.py`.
+- [ ] Re-run the benchmarks on the new pipeline, after question 1 has an answer.
+- [ ] The save call for 2D (`test_accuracy_comparison_zoom`) is commented out in `profile_approaches.py`. Turn it back on.
 
 ---
 
@@ -273,14 +317,16 @@ Out of scope:
 
 ## Suggested order
 
-1. Add the configuration file with origins, pins and kinds. Point `products/sources.py` at the s3 tables.
-2. Move the frozen files (S9, S10) to a versioned location.
-3. P1 → P2 → P3. Register P3, then run S3 on the labeled and validation roots, then build P4. This gives the training and validation figures.
-4. Start the full deployment run (S2 + S3 + S4 for all roots) while you work on P6, P8 and the S11 export.
-5. P15 → P7 → P9 → P11, then P12 re-map, then P13 apply.
-6. P10 (the full scan).
-7. Point `stat_summaries.py` at the new products.
-8. P5 (H01), P14, composites.
+1. [ ] Add the configuration file with origins, pins and kinds. Point `products/sources.py` at the s3 tables.
+   - Partly done: `products/sources.py` points at the s3 tables. The configuration file does not exist yet.
+2. [ ] Move the frozen files (S9, S10) to a versioned location.
+3. [ ] P1 → P2 → P3. Register P3, then run S3 on the labeled and validation roots, then build P4. This gives the training and validation figures.
+   - Partly done: P1, P2, P3 and P4 are built. S3 ran on the validation roots only.
+4. [ ] Start the full deployment run (S2 + S3 + S4 for all roots) while you work on P6, P8 and the S11 export.
+5. [ ] P15 → P7 → P9 → P11, then P12 re-map, then P13 apply.
+6. [ ] P10 (the full scan).
+7. [ ] Point `stat_summaries.py` at the new products.
+8. [ ] P5 (H01), P14, composites.
 
 ## Open questions
 
@@ -300,8 +346,8 @@ Out of scope:
 The hashed cache is for development. The published tables have clean names. A separate export step makes them, so both exist at the same time.
 
 - **Cache layout (development):** `data/tables/v{VERSION}/{name}/{hash}.parquet`. The hash comes from the table's `cache_params`, which include the cache keys of its inputs. A change to any pin or input gives a new hash, so the cache rebuilds. The folder names are the clean table names, and stale entries sit next to the current one.
-- **`just publish` (planned):** copies the current cache file of each product to `release/{name}.parquet`.
+- [ ] **`just publish` (planned):** copies the current cache file of each product to `release/{name}.parquet`.
   - If any product has no current cache, it fails. A release then cannot mix old and new files.
   - It writes the pins of each table (origin paths, `as_of`, versions, parameter hashes) into the parquet footer metadata of that file. The pins are then part of the file and cannot drift from it.
-- **Release mode (planned):** with release mode on, `Tables[name].lazy()` reads `release/{name}.parquet` and builds nothing. A reader with only the release files can run the figure scripts, with no cloud access and no hashes. During development, release mode is off, and the registry uses the hashed cache.
+- [ ] **Release mode (planned):** with release mode on, `Tables[name].lazy()` reads `release/{name}.parquet` and builds nothing. A reader with only the release files can run the figure scripts, with no cloud access and no hashes. During development, release mode is off, and the registry uses the hashed cache.
 - **After publication:** a new pin makes a new hashed cache. Only a new run of `just publish` changes the `release/` folder.

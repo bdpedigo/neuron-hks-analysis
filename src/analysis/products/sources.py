@@ -19,6 +19,11 @@ DOMAIN_FEATURES_PARAMS = "p-e758527c9d981378"
 DOMAIN_EDGES_VERSION = "s3"
 DOMAIN_EDGES_PARAMS = "p-b60a113f02ed8102"
 
+# NOTE: the domain_predictions hash includes the model, here
+# `ssa_model_full_v1`. A new model gives a new path.
+DOMAIN_PREDICTIONS_VERSION = "s1"
+DOMAIN_PREDICTIONS_PARAMS = "p-96cea889064d4d41"
+
 SYNAPSE_MAPPING_PATH = (
     BASE_CLOUD_PATH
     / DATASTACK
@@ -47,6 +52,13 @@ DOMAIN_EDGES_PATH = (
     / DOMAIN_EDGES_VERSION
     / DOMAIN_EDGES_PARAMS
 )
+DOMAIN_PREDICTIONS_PATH = (
+    BASE_CLOUD_PATH
+    / DATASTACK
+    / "domain_predictions"
+    / DOMAIN_PREDICTIONS_VERSION
+    / DOMAIN_PREDICTIONS_PARAMS
+)
 
 # NOTE: the deployment tables are append-only, and the latest attempt per root
 # wins at read time. A read with an `as_of` cutoff ignores the attempts after
@@ -57,3 +69,7 @@ DOMAIN_EDGES_PATH = (
 # The microns_top_labeled job was complete at this time (all roots but one,
 # which cannot be processed).
 LABELED_AS_OF = datetime(2026, 10, 12, 4, 13, tzinfo=timezone.utc)
+
+# The microns_validation job (run-20261012-235436-628a) was complete at this
+# time: all 132 roots, last commit 2026-10-13 04:57 UTC.
+VALIDATION_AS_OF = datetime(2026, 10, 13, 5, 0, tzinfo=timezone.utc)

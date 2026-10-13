@@ -44,6 +44,96 @@ Tables.register(
 )
 
 
+VALIDATION_LABEL_FILES = {
+    "exc": "exc_sample_synapses_labeled.csv",
+    "inh": "inh_sample_synapses_labeled.csv",
+}
+VALIDATION_LABEL_COLUMNS = [
+    "synapse_id",
+    "post_nucleus_id",
+    "post_cell_type",
+    "post_mtype",
+    "post_cell_type_depth",
+    "visual_area",
+    "tag",
+]
+
+
+def read_validation_label_files() -> pl.DataFrame:
+    """The S9 validation labels, without the root IDs stored in the files."""
+    frames = []
+    for label_set, file_name in VALIDATION_LABEL_FILES.items():
+        frame = pl.read_csv(TABLE_PATH / "validation" / file_name)
+        frames.append(
+            frame.select(
+                pl.lit(label_set).alias("label_set"),
+                *[col for col in VALIDATION_LABEL_COLUMNS if col in frame.columns],
+            )
+        )
+    return pl.concat(frames, how="diagonal")
+
+
+def fetch_validation_labels(
+    client, validation_cells: pl.DataFrame, version=VERSION
+) -> pl.DataFrame:
+    """The S9 validation labels, with the synapse and cell root IDs at `version`.
+
+    `root_id` is the cell (from the label's nucleus), and `post_pt_root_id` is
+    the post root of the synapse. They differ when an edit after the labeling
+    moved the synapse off the cell, and `on_cell` is false for those rows.
+    """
+    labels = read_validation_label_files()
+    synapses = client.materialize.query_table(
+        "synapses_pni_2",
+        filter_in_dict=dict(id=labels["synapse_id"].to_list()),
+        materialization_version=version,
+        desired_resolution=[1, 1, 1],
+        split_positions=True,
+    )
+    synapses = pl.from_pandas(
+        synapses[
+            [
+                "id",
+                "pre_pt_root_id",
+                "post_pt_root_id",
+                "size",
+                "ctr_pt_position_x",
+                "ctr_pt_position_y",
+                "ctr_pt_position_z",
+            ]
+        ]
+    ).rename({"id": "synapse_id"})
+    cells = validation_cells.select(
+        pl.col("nucleus_id").alias("post_nucleus_id"), "root_id"
+    )
+    return (
+        labels.join(cells, on="post_nucleus_id", how="left")
+        .join(synapses, on="synapse_id", how="left")
+        .with_columns(
+            (pl.col("post_pt_root_id") == pl.col("root_id"))
+            .fill_null(False)
+            .alias("on_cell")
+        )
+    )
+
+
+Tables.register(
+    "validation_labels",
+    materialize=lambda path: write_parquet_atomic(
+        fetch_validation_labels(
+            CAVEclient(DATASTACK),
+            Tables["validation_cells"].collect(),
+            version=VERSION,
+        ),
+        path,
+    ),
+    cache_params={
+        "version": VERSION,
+        "validation_cells": Tables["validation_cells"].cache_key,
+    },
+)
+
+
 def get_validation_ids(client, version=VERSION) -> np.ndarray:
     """The root IDs of the validation cells at `version`.
 
