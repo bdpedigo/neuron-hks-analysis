@@ -198,7 +198,8 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 
 **P6 `cell_selection`** (tiny)
 - Origin: S1. Pin: v1822. Kind: rebuildable.
-- [ ] Move the `proofread` / `column` / thalamic rules into one function or table. They are now copied in `tables.py` and `stat_summaries.py`.
+- [x] Moved the `proofread` / `column` / thalamic rules into `select_cells` in `products/cell_selection.py`, registered as `cell_selection`.
+  - `tables.py` and `stat_summaries.py` both call `select_cells`. `tests/test_cell_selection.py` tests the rules.
 - Glued counts (1,352 cells: 1,182 E, 150 I, 20 TH) will change at v1822.
 
 **P7 `synapse_structure`** (all)

@@ -36,7 +36,11 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
-from analysis.products.cell_selection import select_cells, thalamic_roots as select_thalamic_roots
+from analysis.products.cell_selection import (
+    COLUMN_SOURCE,
+    select_cells,
+    thalamic_roots as select_thalamic_roots,
+)
 from analysis import (
     CELL_TYPE_CATEGORIES,
     CELL_TYPE_PALETTE,
@@ -1669,7 +1673,7 @@ data = data.copy()
 data["post_non_spine_synapses"] = (
     data["post_shaft_synapses"] + data["post_soma_synapses"]
 )
-data["is_manual"] = data["cell_type_source"] == "allen_v1_column_types_slanted_ref"
+data["is_manual"] = data["cell_type_source"] == COLUMN_SOURCE
 x = "post_spine_synapses"
 y = "post_shaft_synapses"
 sns.scatterplot(
