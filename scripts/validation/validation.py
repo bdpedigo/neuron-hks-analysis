@@ -91,7 +91,7 @@ ax.autoscale(False)
 ax.fill_between([-1, 6.5], 0, 1, color=CELL_TYPE_PALETTE["Excitatory"], alpha=0.2)
 ax.fill_between([6.5, 11], 0, 1, color=CELL_TYPE_PALETTE["Inhibitory"], alpha=0.05)
 ax.text(
-    0.05,
+    0.23,
     0.98,
     "Excitatory",
     color=CELL_TYPE_PALETTE["Excitatory"],
@@ -99,7 +99,7 @@ ax.text(
     va="top",
 )
 ax.text(
-    0.67,
+    0.73,
     0.98,
     "Inhibitory",
     color=CELL_TYPE_PALETTE["Inhibitory"],

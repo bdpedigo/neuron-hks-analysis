@@ -184,14 +184,13 @@ The original records of these labels are neuroglancer states or notebooks. A sta
   | `compare_neurd_weighted_f1` | 0.842 | 0.842 |
 
   The NEURD scores did not change, so the label side and the NEURD join agree with the old run.
-- [ ] P5: read the MICrONS bar in Fig 6A from `validation_exc_f1`, not the hard-coded 0.977.
 
 **P5 `h01_validation`** (H01 labeled, small)
 - Origin: S12 ⋈ S13, joined the same way as P15. Pin: S12 + S13. Kind: rebuildable.
 - [ ] Run a deployment job on the `h01_c3_flat` datastack for the annotated roots, in the same format as the MICrONS jobs.
 - [ ] Port from `meshrep/sandbox/h01_validation.py` (not `clean_paper_code`).
 - [ ] Panel outputs: Fig 6A-C, glued `h01_validation_exc_f1`.
-- [ ] The MICrONS bar in 6A is hard-coded (0.977). Read it from P4 instead.
+- [ ] The MICrONS bar in 6A is hard-coded (0.977, at line 588 of the sandbox script). Read `validation_exc_f1` (written by `validation.py` from P4) instead.
 - [ ] The current sandbox script writes the 3-panel layout to `h01_validation_composite`. The paper uses the 4-panel `_with_calibration` layout.
 - [ ] The calibration panel (6C) needs `p_spine`. Take it from the S13 `domain_predictions` posteriors.
 
