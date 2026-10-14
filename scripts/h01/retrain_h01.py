@@ -4,11 +4,17 @@
 Ported from meshrep/clean_paper_code/retrain_h01.py. Each fold trains on the
 MICrONS training rows, with or without the H01 retrain rows of the other folds,
 and scores the held-out H01 retrain rows. Two splits: by neuron (experiment 1)
-and by synapse, stratified on the label (experiment 2).
+and by synapse, stratified on the label (experiment 2). Every model variant in
+`MODEL_SPECS` runs, with its own features and labels. The glued variables and
+the per-experiment figures are for the main model.
 
 Reads only `model_inputs` (MICrONS) and `h01_retrain_model_inputs` (H01), so the
-H01 validation cohort stays held out. The features, the nucleus mask and the
-forest are those of the main model (`analysis.models`).
+H01 validation cohort stays held out. The nucleus mask and the forest are those
+of `train.py` (`analysis.models`).
+
+The fold results of each variant are saved to `data/h01_retrain/`, and a saved
+result is read instead of fit again. Delete that folder after a change to the
+rows, the features or the forest.
 """
 
 import numpy as np
@@ -22,6 +28,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from tqdm.auto import tqdm
 
 from analysis import (
+    DATA_PATH,
     Tables,
     save_matplotlib_figure,
     save_variables,
@@ -30,16 +37,21 @@ from analysis import (
 from analysis.models import (
     MAIN_MODEL,
     MODEL_SPECS,
+    feature_columns,
     make_model,
     nucleus_masked_roots,
     select_spectral_columns,
 )
 
 SUBFOLDER = "h01_retrain"
+RESULTS_PATH = DATA_PATH / "h01_retrain"
 LABELS = ["soma", "shaft", "spine"]
+BINARY_LABELS = ["not_spine", "spine"]
 H01_SAMPLE_WEIGHT = 1000
 N_SPLITS = 10
 SPLIT_SEED = 42
+# The neuron split is off for now, to save time: the synapse split runs alone.
+RUN_NEURON_SPLIT = False
 
 # Which rows each mode trains on, and whether it applies frustratingly easy domain
 # adaptation (feature augmentation, Daumé 2007). The test rows are always H01.
@@ -56,37 +68,33 @@ MODE_NAMES = {
     "both_feda": "Train on both\n(FEDA)",
 }
 BASELINE_MODE, COMPARE_MODE = "microns_only", "both_upweighted"
+METRIC = "macro_f1"
 
 set_matplotlib_theme()
 
 # %%
 microns = Tables["model_inputs"].collect()
 spectral_columns = select_spectral_columns(microns.columns)
-feature_columns = spectral_columns + MODEL_SPECS[MAIN_MODEL]["extra_features"]
+all_feature_columns = spectral_columns + ["distance_to_nucleus"]
 
 # The MICrONS rows as train.py builds them: rows with domain features, and the
 # nucleus mask by root.
-microns = (
-    microns.drop_nulls(spectral_columns)
-    .with_columns(
-        distance_to_nucleus=pl.when(
-            pl.col("root_id").is_in(
-                nucleus_masked_roots(microns.drop_nulls(spectral_columns)["root_id"])
-            )
-        )
-        .then(None)
-        .otherwise(pl.col("distance_to_nucleus")),
-        datastack=pl.lit("microns"),
-        sample_weight=pl.col("sample_weight").cast(pl.Float64),
+microns = microns.drop_nulls(spectral_columns)
+microns = microns.with_columns(
+    distance_to_nucleus=pl.when(
+        pl.col("root_id").is_in(nucleus_masked_roots(microns["root_id"]))
     )
-    .select(
-        "root_id",
-        "synapse_id",
-        pl.col("tag").alias("label"),
-        "datastack",
-        "sample_weight",
-        *feature_columns,
-    )
+    .then(None)
+    .otherwise(pl.col("distance_to_nucleus")),
+    datastack=pl.lit("microns"),
+    sample_weight=pl.col("sample_weight").cast(pl.Float64),
+).select(
+    "root_id",
+    "synapse_id",
+    pl.col("tag").alias("label"),
+    "datastack",
+    "sample_weight",
+    *all_feature_columns,
 )
 h01 = (
     Tables["h01_retrain_model_inputs"]
@@ -96,13 +104,19 @@ h01 = (
         datastack=pl.lit("h01"), sample_weight=pl.lit(H01_SAMPLE_WEIGHT, pl.Float64)
     )
     .select(
-        "root_id", "synapse_id", "label", "datastack", "sample_weight", *feature_columns
+        "root_id",
+        "synapse_id",
+        "label",
+        "datastack",
+        "sample_weight",
+        *all_feature_columns,
     )
 )
 assert set(microns["label"].unique()) == set(h01["label"].unique()) == set(LABELS)
 h01_roots = np.unique(h01["root_id"].to_numpy())
 print(
-    f"MICrONS: {len(microns):,} synapses. H01 retrain: {len(h01):,} synapses on {len(h01_roots)} roots"
+    f"MICrONS: {len(microns):,} synapses. "
+    f"H01 retrain: {len(h01):,} synapses on {len(h01_roots)} roots"
 )
 
 save_variables(
@@ -114,6 +128,10 @@ save_variables(
 
 
 # %%
+def spec_labels(spec: dict) -> list[str]:
+    return BINARY_LABELS if spec["binary"] else LABELS
+
+
 def feda_augment(X, domains, source="microns", target="h01"):
     # A general copy and one copy per domain: a target row becomes [X, 0, X].
     is_source = (domains == source)[:, None]
@@ -121,34 +139,35 @@ def feda_augment(X, domains, source="microns", target="h01"):
     return np.hstack([X, np.where(is_source, X, 0.0), np.where(is_target, X, 0.0)])
 
 
-def get_xyw(df: pl.DataFrame, feda: bool):
-    X = df.select(feature_columns).to_numpy()
+def get_xyw(df: pl.DataFrame, spec: dict, feda: bool):
+    X = df.select(feature_columns(spec, spectral_columns)).to_numpy()
     if feda:
         X = feda_augment(X, df["datastack"].to_numpy())
-    return X, df["label"].to_numpy(), df["sample_weight"].to_numpy()
+    y = df["label"].to_numpy()
+    if spec["binary"]:
+        # As train.py does: soma and shaft merge into not_spine.
+        y = np.where(y == "spine", "spine", "not_spine")
+    return X, y, df["sample_weight"].to_numpy()
 
 
-def run_folds(splits, train_h01_of, test_h01_of) -> pd.DataFrame:
-    """Score every mode on every fold. `train_h01_of(fold)` and `test_h01_of(fold)`
+def run_folds(spec: dict, splits, train_h01_of, test_h01_of) -> pl.DataFrame:
+    """Score every mode on every fold. `train_h01_of(split)` and `test_h01_of(split)`
     give the H01 rows the fold trains and tests on."""
+    labels = spec_labels(spec)
     rows = []
     for fold, split in enumerate(tqdm(splits)):
         test_df = test_h01_of(split)
-        X_test, y_test, _ = get_xyw(test_df, feda=False)
         for mode, config in TRAIN_MODES.items():
             parts = []
             if "h01" in config["datastacks"]:
                 parts.append(train_h01_of(split))
             if "microns" in config["datastacks"]:
                 parts.append(microns)
-            X_train, y_train, w_train = get_xyw(pl.concat(parts), feda=config["feda"])
-            if config["feda"]:
-                X_test_mode, _, _ = get_xyw(test_df, feda=True)
-            else:
-                X_test_mode = X_test
+            X_train, y_train, w_train = get_xyw(pl.concat(parts), spec, config["feda"])
+            X_test, y_test, _ = get_xyw(test_df, spec, config["feda"])
             model = make_model(random_state=13294587 * fold)
             model.fit(X_train, y_train, sample_weight=w_train)
-            y_pred = model.predict(X_test_mode)
+            y_pred = model.predict(X_test)
             rows.append(
                 {
                     "fold": fold,
@@ -158,42 +177,87 @@ def run_folds(splits, train_h01_of, test_h01_of) -> pd.DataFrame:
                     "accuracy": accuracy_score(y_test, y_pred),
                     "weighted_f1": f1_score(y_test, y_pred, average="weighted"),
                     "macro_f1": f1_score(y_test, y_pred, average="macro"),
-                    "conf_mat": confusion_matrix(y_test, y_pred, labels=LABELS),
+                    # Row-major, in the order of `spec_labels(spec)`.
+                    "conf_mat": confusion_matrix(y_test, y_pred, labels=labels)
+                    .ravel()
+                    .tolist(),
                 }
             )
-    return pd.DataFrame(rows)
+    return pl.DataFrame(rows)
 
 
 # %%
-# Experiment 1: split by neuron, so no test neuron is in the training rows.
 neuron_splits = list(
     KFold(N_SPLITS, shuffle=True, random_state=SPLIT_SEED).split(h01_roots)
 )
-neuron_results = run_folds(
-    neuron_splits,
-    train_h01_of=lambda split: h01.filter(pl.col("root_id").is_in(h01_roots[split[0]])),
-    test_h01_of=lambda split: h01.filter(pl.col("root_id").is_in(h01_roots[split[1]])),
-)
-
-# %%
-# Experiment 2: split by synapse, stratified on the label.
 synapse_splits = list(
     StratifiedKFold(N_SPLITS, shuffle=True, random_state=SPLIT_SEED).split(
         np.zeros(len(h01)), h01["label"].to_numpy()
     )
 )
-synapse_results = run_folds(
-    synapse_splits,
-    train_h01_of=lambda split: h01[split[0].tolist()],
-    test_h01_of=lambda split: h01[split[1].tolist()],
+# name: (splits, H01 train rows of a split, H01 test rows of a split, held-out unit)
+EXPERIMENTS = {
+    # Experiment 1: split by neuron, so no test neuron is in the training rows.
+    "neuron_split": (
+        neuron_splits,
+        lambda split: h01.filter(pl.col("root_id").is_in(h01_roots[split[0]])),
+        lambda split: h01.filter(pl.col("root_id").is_in(h01_roots[split[1]])),
+        "neurons",
+    ),
+    # Experiment 2: split by synapse, stratified on the label.
+    "synapse_split": (
+        synapse_splits,
+        lambda split: h01[split[0].tolist()],
+        lambda split: h01[split[1].tolist()],
+        "synapses",
+    ),
+}
+if not RUN_NEURON_SPLIT:
+    del EXPERIMENTS["neuron_split"]
+
+results = {}
+for experiment, (splits, train_h01_of, test_h01_of, _) in EXPERIMENTS.items():
+    for name, spec in MODEL_SPECS.items():
+        path = RESULTS_PATH / experiment / f"{name}.parquet"
+        if not path.exists():
+            print(f"{experiment}: {name}")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            run_folds(spec, splits, train_h01_of, test_h01_of).write_parquet(path)
+        results[experiment, name] = pl.read_parquet(path).to_pandas()
+
+all_results = pd.concat(
+    [
+        df.assign(experiment=experiment, model=name)
+        for (experiment, name), df in results.items()
+    ],
+    ignore_index=True,
 )
 
 # %%
-EXPERIMENTS = {
-    "neuron_split": (neuron_results, "neurons"),
-    "synapse_split": (synapse_results, "synapses"),
-}
-METRIC = "macro_f1"
+# Every variant: the mean and spread over folds, and the paired test of the modes.
+print(
+    all_results.groupby(["experiment", "model", "train_mode"], sort=False)[
+        ["weighted_f1", "macro_f1"]
+    ]
+    .agg(["mean", "std"])
+    .round(3)
+    .to_string()
+)
+
+
+def paired_test(results: pd.DataFrame) -> float:
+    baseline = results.query("train_mode == @BASELINE_MODE").sort_values("fold")[METRIC]
+    compare = results.query("train_mode == @COMPARE_MODE").sort_values("fold")[METRIC]
+    return wilcoxon(baseline.to_numpy(), compare.to_numpy()).pvalue
+
+
+for (experiment, name), df in results.items():
+    print(
+        f"{experiment} {name}: Wilcoxon ({BASELINE_MODE} vs {COMPARE_MODE}) p={paired_test(df):.3g}"
+    )
+
+# %%
+# The main model: the figures and glued variables for the paper.
 
 
 def plot_folds(results: pd.DataFrame, held_out: str):
@@ -223,22 +287,9 @@ def plot_folds(results: pd.DataFrame, held_out: str):
     return fig
 
 
-for experiment, (results, held_out) in EXPERIMENTS.items():
-    summary = results.groupby("train_mode")[METRIC].agg(["mean", "std"])
-    print(experiment)
-    print(
-        results.groupby("train_mode")[["accuracy", "weighted_f1", "macro_f1"]]
-        .agg(["mean", "std"])
-        .round(3)
-    )
-
-    baseline = results.query("train_mode == @BASELINE_MODE").sort_values("fold")[METRIC]
-    compare = results.query("train_mode == @COMPARE_MODE").sort_values("fold")[METRIC]
-    stat, p_value = wilcoxon(baseline.to_numpy(), compare.to_numpy())
-    print(
-        f"Wilcoxon ({BASELINE_MODE} vs {COMPARE_MODE}): statistic={stat}, p={p_value:.3g}"
-    )
-
+for experiment, (*_, held_out) in EXPERIMENTS.items():
+    main = results[experiment, MAIN_MODEL]
+    summary = main.groupby("train_mode")[METRIC].agg(["mean", "std"])
     save_variables(
         prefix=f"h01_retrain_{experiment}_",
         **{
@@ -249,11 +300,12 @@ for experiment, (results, held_out) in EXPERIMENTS.items():
         format="{:.3f}",
     )
     save_variables(
-        prefix=f"h01_retrain_{experiment}_", wilcoxon_p=p_value, format="{:.2g}"
+        prefix=f"h01_retrain_{experiment}_",
+        wilcoxon_p=paired_test(main),
+        format="{:.2g}",
     )
-
     save_matplotlib_figure(
-        plot_folds(results, held_out),
+        plot_folds(main, held_out),
         f"retrain_{experiment}_{METRIC}",
         subfolder=SUBFOLDER,
     )
@@ -263,10 +315,10 @@ for experiment, (results, held_out) in EXPERIMENTS.items():
         1, len(TRAIN_MODES), figsize=(4 * len(TRAIN_MODES), 4), layout="constrained"
     )
     for ax, mode in zip(np.atleast_1d(axs), TRAIN_MODES):
-        summed = np.sum(
-            np.stack(results.query("train_mode == @mode")["conf_mat"]), axis=0
+        summed = np.sum(np.stack(main.query("train_mode == @mode")["conf_mat"]), axis=0)
+        confusion = pd.DataFrame(
+            summed.reshape(len(LABELS), len(LABELS)), index=LABELS, columns=LABELS
         )
-        confusion = pd.DataFrame(summed, index=LABELS, columns=LABELS)
         confusion = confusion.div(confusion.sum(axis=1), axis=0)
         sns.heatmap(
             confusion,
@@ -283,3 +335,59 @@ for experiment, (results, held_out) in EXPERIMENTS.items():
     save_matplotlib_figure(
         fig, f"retrain_{experiment}_confusion_matrices", subfolder=SUBFOLDER
     )
+
+# %%
+# Every variant on one figure. The binary variants get their own panel, because
+# their macro F1 is over 2 classes, not 3.
+multiclass = [name for name, spec in MODEL_SPECS.items() if not spec["binary"]]
+binary = [name for name, spec in MODEL_SPECS.items() if spec["binary"]]
+for experiment, (*_, held_out) in EXPERIMENTS.items():
+    df = all_results.query("experiment == @experiment").assign(
+        train_mode=lambda d: d["train_mode"].map(MODE_NAMES)
+    )
+    fig, axs = plt.subplots(
+        1,
+        2,
+        figsize=(12, 5),
+        layout="constrained",
+        gridspec_kw=dict(width_ratios=[len(multiclass), len(binary)]),
+    )
+    for ax, names, title in [
+        (axs[0], multiclass, "soma, shaft, spine"),
+        (axs[1], binary, "spine, not spine"),
+    ]:
+        panel = df[df["model"].isin(names)]
+        sns.stripplot(
+            data=panel,
+            x="model",
+            y=METRIC,
+            hue="train_mode",
+            order=names,
+            dodge=True,
+            alpha=0.6,
+            ax=ax,
+            legend=ax is axs[1],
+        )
+        sns.pointplot(
+            data=panel,
+            x="model",
+            y=METRIC,
+            hue="train_mode",
+            order=names,
+            dodge=0.4,
+            linestyle="none",
+            markers="_",
+            markersize=20,
+            color="black",
+            errorbar=None,
+            ax=ax,
+            legend=False,
+        )
+        ax.set(xlabel="", ylabel=f"Macro F1 on held-out H01 {held_out}", title=title)
+        ax.set_xticks(
+            range(len(names)),
+            [n.removeprefix("ssa_model_") for n in names],
+            rotation=30,
+        )
+    sns.move_legend(axs[1], "upper left", bbox_to_anchor=(1, 1), title="")
+    save_matplotlib_figure(fig, f"retrain_all_models_{experiment}", subfolder=SUBFOLDER)

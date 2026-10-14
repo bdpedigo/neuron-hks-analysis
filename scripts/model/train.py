@@ -12,6 +12,7 @@ from upath import UPath
 
 from analysis import (
     FIG_PATH,
+    MODEL_PATH,
     Tables,
     save_matplotlib_figure,
     save_variables,
@@ -20,13 +21,20 @@ from analysis import (
 from analysis.models import (
     MAIN_MODEL,
     MODEL_SPECS,
+    MODEL_VERSION,
     NUCLEUS_MASK_FRACTION,
     RF_PARAMS,
+    feature_columns,
+    load_ssa_model,
     make_model,
     nucleus_masked_roots,
     save_model,
     select_spectral_columns,
 )
+
+# NOTE: with RETRAIN off, a variant whose model folder exists is loaded, not
+# trained again. The `_v1` folders are what the deployment published.
+RETRAIN = False
 
 # %%
 
@@ -72,7 +80,7 @@ nucleus_masked = training_table["root_id"].isin(
 
 
 def make_xy(spec):
-    X = training_table[spectral_columns + spec["extra_features"]]
+    X = training_table[feature_columns(spec, spectral_columns)]
     if "distance_to_nucleus" in X:
         X = X.assign(distance_to_nucleus=X["distance_to_nucleus"].mask(nucleus_masked))
     y = training_table["tag"]
@@ -94,6 +102,10 @@ save_variables(
 models = {}
 for name, spec in MODEL_SPECS.items():
     X, y = make_xy(spec)
+    if not RETRAIN and (MODEL_PATH / f"{name}_{MODEL_VERSION}").exists():
+        models[name] = load_ssa_model(f"{name}_{MODEL_VERSION}").estimator
+        print(f"{name}: loaded the existing {MODEL_VERSION} model")
+        continue
     currtime = time.time()
     model = make_model(random_state=0)
     model.fit(X, y, sample_weight=sample_weight)

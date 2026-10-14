@@ -22,10 +22,20 @@ FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
 # NOTE: `distance_to_nucleus` is null for a root with no nucleus point. The
 # random forest accepts missing values, so those rows stay in. See also the
 # nucleus mask below.
+# `prefixes` names the spectral columns a variant reads, and `extra_features` the
+# columns after them.
+HKS_PREFIXES = ("hks_",)
 MODEL_SPECS = {
-    "ssa_model_full": dict(extra_features=["distance_to_nucleus"], binary=False),
-    "ssa_model_no_nuc": dict(extra_features=[], binary=False),
-    "ssa_model_binary": dict(extra_features=[], binary=True),
+    "ssa_model_full": dict(
+        prefixes=FEATURE_PREFIXES, extra_features=["distance_to_nucleus"], binary=False
+    ),
+    "ssa_model_no_nuc": dict(prefixes=FEATURE_PREFIXES, extra_features=[], binary=False),
+    "ssa_model_binary": dict(prefixes=FEATURE_PREFIXES, extra_features=[], binary=True),
+    "ssa_model_hks": dict(prefixes=HKS_PREFIXES, extra_features=[], binary=False),
+    "ssa_model_hks_nuc": dict(
+        prefixes=HKS_PREFIXES, extra_features=["distance_to_nucleus"], binary=False
+    ),
+    "ssa_model_hks_binary": dict(prefixes=HKS_PREFIXES, extra_features=[], binary=True),
 }
 # The learning curve, the glued variables and every downstream figure use this one.
 MAIN_MODEL = "ssa_model_full"
@@ -51,6 +61,14 @@ DOMAIN_MARKER = "domain_n_vertices"
 def select_spectral_columns(columns) -> list[str]:
     """The spectral feature columns among `columns`, in their table order."""
     return [c for c in columns if c.startswith(FEATURE_PREFIXES)]
+
+
+def feature_columns(spec: dict, columns) -> list[str]:
+    """The columns a variant reads: its spectral columns among `columns`, in table
+    order, then its extra features."""
+    return [c for c in columns if c.startswith(spec["prefixes"])] + list(
+        spec["extra_features"]
+    )
 
 
 def nucleus_masked_roots(root_ids) -> np.ndarray:

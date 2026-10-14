@@ -17,7 +17,14 @@ from analysis import Tables, save_matplotlib_figure, set_matplotlib_theme
 from analysis.models import load_ssa_model, predict
 
 SUBFOLDER = "h01_retrain"
-MODELS = ["ssa_model_full_v1", "ssa_model_no_nuc_v1", "ssa_model_binary_v1"]
+MODELS = [
+    "ssa_model_full_v1",
+    "ssa_model_no_nuc_v1",
+    "ssa_model_binary_v1",
+    "ssa_model_hks_v1",
+    "ssa_model_hks_nuc_v1",
+    "ssa_model_hks_binary_v1",
+]
 
 set_matplotlib_theme()
 
@@ -85,10 +92,14 @@ scores = pd.DataFrame(scores).set_index("model")
 print(scores.round(3))
 
 # %%
+n_columns = 3
+n_rows = -(-len(MODELS) // n_columns)
 fig, axs = plt.subplots(
-    1, len(MODELS), figsize=(4 * len(MODELS), 4), layout="constrained"
+    n_rows, n_columns, figsize=(4 * n_columns, 4 * n_rows), layout="constrained"
 )
-for ax, (name, confusion) in zip(np.atleast_1d(axs), confusions.items()):
+for ax in np.ravel(axs)[len(MODELS) :]:
+    ax.set_axis_off()
+for ax, (name, confusion) in zip(np.ravel(axs), confusions.items()):
     sns.heatmap(
         confusion,
         ax=ax,

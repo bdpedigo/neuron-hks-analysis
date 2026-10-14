@@ -113,13 +113,18 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 - [x] Retrain on the s3 feature columns: 111,640 training synapses. `train.py` selects features by prefix (`hks_`, `curvature_`, `normal_`), so it uses the s3 columns without changes.
   - `distance_to_nucleus` is added locally, after P2. A new product `root_nuclei` (`products/nuclei.py`) holds every nucleus point on each root in nm. It comes from CAVE `nucleus_detection_lookup_v1` at v1822, and a root can have several rows. The uncached view `model_inputs` = P2 ⋈ `root_nuclei` adds the distance from `domain_x/y/z` to the **nearest** nucleus on the root. It is null for a root with no nucleus, and the random forest accepts the missing values.
   - [x] Build `root_nuclei` (`just materialize root_nuclei`, a CAVE query), then re-run the training.
-- [x] Train three model variants. `MODEL_SPECS` in `train.py` defines them. All three use the same 111,640 rows and the same `RF_PARAMS`.
+- [x] Train six model variants. `MODEL_SPECS` in `src/analysis/models.py` defines them: `prefixes` picks the spectral columns, and `extra_features` the columns after them. All six use the same 111,640 rows and the same `RF_PARAMS`.
 
   | Variant | Features | Classes |
   |---|---|---|
   | `ssa_model_full` | 74 spectral + `distance_to_nucleus` | shaft, soma, spine |
   | `ssa_model_no_nuc` | 74 spectral | shaft, soma, spine |
   | `ssa_model_binary` | 74 spectral | not_spine, spine (soma and shaft merged) |
+  | `ssa_model_hks` | 32 HKS | shaft, soma, spine |
+  | `ssa_model_hks_nuc` | 32 HKS + `distance_to_nucleus` | shaft, soma, spine |
+  | `ssa_model_hks_binary` | 32 HKS | not_spine, spine |
+
+  - The three HKS variants were added on 2026-10-14, to measure what the curvature and normal features add. `train.py` has `RETRAIN = False`, so a rerun loads a variant whose folder exists and trains only the missing ones. The rerun that trained them left `glued_variables.tex` unchanged.
 
   - [x] Each variant saves to `data/models/{variant}_{MODEL_VERSION}`, for example `data/models/ssa_model_full_v1`. The folder name is also the published name. The `trained_on` metadata in the model records the feature table (`DOMAIN_FEATURES_VERSION` + `DOMAIN_FEATURES_PARAMS`). The random forest and the learning-curve sampling are seeded.
   - Published names are write-once. Bump `MODEL_VERSION` in `train.py` (`v1` → `v2`) for each retrained model that you publish.
@@ -211,7 +216,16 @@ The original records of these labels are neuroglancer states or notebooks. A sta
   - [ ] The 4-panel `_with_calibration` composite (the paper layout) is not ported. Port it with the composites.
 - **Local models** (`src/analysis/models.py`): `load_ssa_model(name_or_path)` loads any MLflow sklearn folder, and `predict(model, features)` scores it by the rules of the deployment prediction step. `train.py` imports its configuration (`MODEL_SPECS`, `RF_PARAMS`, the nucleus mask) from this module.
   - [x] `scripts/h01/retrain_models.py` scores the models in its `MODELS` list on the retrain cohort. Its parity check reproduces the deployment exactly for `ssa_model_full_v1` (0 label mismatches, posterior difference 0).
-  - Retrain cohort, zero-shot (no H01 training data): `ssa_model_full_v1` weighted F1 0.958, macro F1 0.913. `ssa_model_no_nuc_v1` 0.953 and 0.870. `ssa_model_binary_v1` (spine against not spine) 0.962 and 0.953.
+  - Retrain cohort, zero-shot (no H01 training data), 1,978 scored synapses:
+
+    | Variant | Weighted F1 | Macro F1 |
+    |---|---|---|
+    | `ssa_model_full_v1` | 0.958 | 0.913 |
+    | `ssa_model_no_nuc_v1` | 0.953 | 0.870 |
+    | `ssa_model_hks_v1` | 0.948 | 0.873 |
+    | `ssa_model_hks_nuc_v1` | 0.950 | 0.864 |
+    | `ssa_model_binary_v1` (2 classes) | 0.962 | 0.953 |
+    | `ssa_model_hks_binary_v1` (2 classes) | 0.956 | 0.946 |
 - [x] Port `meshrep/clean_paper_code/retrain_h01.py` to `scripts/h01/retrain_h01.py` (paper revision). It reads only `model_inputs` and `h01_retrain_model_inputs`.
   - Train modes `microns_only` and `both_upweighted` (H01 rows weighted 1,000). Experiment 1 splits the retrain roots into 10 folds, experiment 2 splits the synapses (stratified). The features, the nucleus mask and the forest are those of the main model, so the old script's values (32 HKS columns, 250 trees) do not carry over.
   - The experiment 2 Wilcoxon test now uses the experiment 2 results. The old script used the experiment 1 results.
