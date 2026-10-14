@@ -78,8 +78,8 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 | S9 | Validation labels from the labeling notebook `BD_250519_validation_set.ipynb`. The files carry `synapse_id` and `post_nucleus_id`. | none (one-time export) | `data/tables/validation/{exc,inh}_sample_synapses_labeled.csv`, `validation_ids_used.csv` (nucleus IDs) | validation | cached |
 | S10 | Checked multi-input spines from 10 neuroglancer states (`get_multi_annotations`) | none (one-time export) | `data/tables/v1412/multi_spine_annotations.parquet` | column | cached, keyed by v1412 IDs |
 | S11 | Single-spine labels from 7 neuroglancer states + `cell_type_selection_for_multis.csv` (`meshrep/sandbox/sample_cells_for_multi_validation.py`) | none (one-time export) | not exported yet | labeled spines | todo |
-| S12 | H01 labels from neuroglancer states + H01 CAVE `h01_c3_flat` | H01 v1054 | not exported yet | H01 labeled | todo |
-| S13 | Deployment tables for H01 (`synapse_mapping`, `vertex_domains`, `domain_features`, `domain_predictions`) on the `h01_c3_flat` datastack | as S2, and the `p-…` hash includes the P3 model URI | none (rows go to P5) | cloud | H01 annotated roots | not run |
+| S12 | H01 labels from 16 neuroglancer states (`scripts/h01/export_h01_states.py`): 8 `validation` states (Fig 6) and 8 `retrain` states | H01 v1054 timestamp | `data/tables/h01/states/{state_id}.json`, `data/tables/h01/states.csv` | H01 labeled | cached |
+| S13 | Deployment tables for H01 (`synapse_mapping`, `vertex_domains`, `domain_features`, `domain_predictions`) on the `h01_c3_flat` datastack, job `h01` | as S2 (the same `sN/p-…` segments), `as_of` = `H01_AS_OF` | none (rows go to P5) | cloud | the 160 H01 label roots | exists |
 
 ---
 
@@ -111,7 +111,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 **P3 HKS synapse model**
 - Origin: P2, by `scripts/model/train.py`. Pin: P2 + training parameters + random seed. Cache: `data/models/`. Kind: frozen, because S3 depends on this exact model. Keep it in MLflow.
 - [x] Retrain on the s3 feature columns: 111,640 training synapses. `train.py` selects features by prefix (`hks_`, `curvature_`, `normal_`), so it uses the s3 columns without changes.
-  - `distance_to_nucleus` is added locally, after P2. A new product `root_nuclei` (`products/nuclei.py`) holds every nucleus point on each root in nm. It comes from CAVE `nucleus_detection_lookup_v1` at v1822, and a root can have several rows. The uncached view `training_features` = P2 ⋈ `root_nuclei` adds the distance from `domain_x/y/z` to the **nearest** nucleus on the root. It is null for a root with no nucleus, and the random forest accepts the missing values.
+  - `distance_to_nucleus` is added locally, after P2. A new product `root_nuclei` (`products/nuclei.py`) holds every nucleus point on each root in nm. It comes from CAVE `nucleus_detection_lookup_v1` at v1822, and a root can have several rows. The uncached view `model_inputs` = P2 ⋈ `root_nuclei` adds the distance from `domain_x/y/z` to the **nearest** nucleus on the root. It is null for a root with no nucleus, and the random forest accepts the missing values.
   - [x] Build `root_nuclei` (`just materialize root_nuclei`, a CAVE query), then re-run the training.
 - [x] Train three model variants. `MODEL_SPECS` in `train.py` defines them. All three use the same 111,640 rows and the same `RF_PARAMS`.
 
@@ -185,14 +185,47 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 
   The NEURD scores did not change, so the label side and the NEURD join agree with the old run.
 
-**P5 `h01_validation`** (H01 labeled, small)
-- Origin: S12 ⋈ S13, joined the same way as P15. Pin: S12 + S13. Kind: rebuildable.
+**P5 `h01_predictions`** (H01 labeled, 3,961 rows)
+- Origin: S12 ⋈ S13. Pin: S12 + S13 (`H01_AS_OF`). Kind: rebuildable. Code: `products/h01.py`. Cache folder: `data/tables/h01_c3_flat/v1054/`.
+- Two cohorts: `validation` (the Fig 6 states, 80 roots, 1,980 label synapses) and `retrain` (a later labeling round, 80 other roots, 1,981 label synapses). `meshrep/sandbox/h01_relabeling.py` drew the retrain cells, and `meshrep/clean_paper_code/retrain_h01.py` read the states back.
 - [x] Run a deployment job on the `h01_c3_flat` datastack for the annotated roots, in the same format as the MICrONS jobs.
-- [ ] Port from `meshrep/sandbox/h01_validation.py` (not `clean_paper_code`).
-- [ ] Panel outputs: Fig 6A-C, glued `h01_validation_exc_f1`.
-- [ ] The MICrONS bar in 6A is hard-coded (0.977, at line 588 of the sandbox script). Read `validation_exc_f1` (written by `validation.py` from P4) instead.
-- [ ] The current sandbox script writes the 3-panel layout to `h01_validation_composite`. The paper uses the 4-panel `_with_calibration` layout.
-- [ ] The calibration panel (6C) needs `p_spine`. Take it from the S13 `domain_predictions` posteriors.
+  - Job `h01` in meshmash-deployment, run `run-20261013-224416-dcc1`: all 160 roots passed all four steps. The last commit was at 2026-10-14 14:47 UTC. `H01_AS_OF` in `products/sources.py` is 15:00 UTC.
+  - H01 is read at the labeling time (the v1054 timestamp, which CAVE no longer serves as a version). The workers read synapses and nuclei from a one-time snapshot, `gs://bdp-ssa/meshmash-deployment/_inputs/h01_c3_flat/v1054/`, because the H01 materialize service is unstable. The snapshot is the only Delta copy of these rows. Treat it as frozen.
+- The tables follow the MICrONS chain with an `h01_` prefix:
+
+  | MICrONS | H01 | Kind |
+  |---|---|---|
+  | `synapse_labels` | `h01_labels` | rebuildable (from S12 and the snapshot) |
+  | `root_nuclei` | `h01_root_nuclei` (the snapshot nucleus rows, 1 per root) | rebuildable |
+  | `labeled_synapse_features` | `h01_labeled_synapse_features` | rebuildable |
+  | `model_inputs` | `h01_model_inputs` | view |
+  | `validation_predictions` | `h01_predictions` (the deployment posteriors) | rebuildable |
+
+  - `h01_retrain_model_inputs` is `h01_model_inputs` for the `retrain` cohort only. **Model work reads only this table**, so the `validation` cohort stays held out until the final evaluation.
+  - 3 label synapses in each cohort map to no domain, so they have no features and no prediction.
+- [x] Port from `meshrep/sandbox/h01_validation.py` to `scripts/validation/h01_validation.py`. It reads only `h01_predictions`. **Not run yet**, so that the validation cohort is not looked at during model work.
+  - [x] The MICrONS bar in 6A reads `validation_exc_f1` (written by `validation.py` from P4), not the hard-coded 0.977.
+  - [x] The calibration panel (6C) takes `posterior_spine` from S13 `domain_predictions`.
+  - [ ] The script reports each cohort and the pooled set. Decide which value goes into Fig 6.
+  - [ ] Panel outputs: Fig 6A-C, glued `h01_validation_exc_f1`.
+  - [ ] The 4-panel `_with_calibration` composite (the paper layout) is not ported. Port it with the composites.
+- **Local models** (`src/analysis/models.py`): `load_ssa_model(name_or_path)` loads any MLflow sklearn folder, and `predict(model, features)` scores it by the rules of the deployment prediction step. `train.py` imports its configuration (`MODEL_SPECS`, `RF_PARAMS`, the nucleus mask) from this module.
+  - [x] `scripts/h01/retrain_models.py` scores the models in its `MODELS` list on the retrain cohort. Its parity check reproduces the deployment exactly for `ssa_model_full_v1` (0 label mismatches, posterior difference 0).
+  - Retrain cohort, zero-shot (no H01 training data): `ssa_model_full_v1` weighted F1 0.958, macro F1 0.913. `ssa_model_no_nuc_v1` 0.953 and 0.870. `ssa_model_binary_v1` (spine against not spine) 0.962 and 0.953.
+- [x] Port `meshrep/clean_paper_code/retrain_h01.py` to `scripts/h01/retrain_h01.py` (paper revision). It reads only `model_inputs` and `h01_retrain_model_inputs`.
+  - Train modes `microns_only` and `both_upweighted` (H01 rows weighted 1,000). Experiment 1 splits the retrain roots into 10 folds, experiment 2 splits the synapses (stratified). The features, the nucleus mask and the forest are those of the main model, so the old script's values (32 HKS columns, 250 trees) do not carry over.
+  - The experiment 2 Wilcoxon test now uses the experiment 2 results. The old script used the experiment 1 results.
+  - Panel outputs: `figures/h01_retrain/retrain_{neuron,synapse}_split_{macro_f1,confusion_matrices}`, glued `h01_retrain_*`.
+  - Result (1,978 retrain synapses with features, 80 roots), mean ± standard deviation over 10 folds:
+
+    | Split | Mode | Weighted F1 | Macro F1 | Wilcoxon p (macro F1) |
+    |---|---|---|---|---|
+    | neuron | `microns_only` | 0.956 ± 0.015 | 0.864 ± 0.127 | 0.074 |
+    | neuron | `both_upweighted` | 0.965 ± 0.011 | 0.911 ± 0.096 | |
+    | synapse | `microns_only` | 0.956 ± 0.016 | 0.899 ± 0.076 | 0.002 |
+    | synapse | `both_upweighted` | 0.964 ± 0.011 | 0.936 ± 0.058 | |
+
+    The H01 rows help most on shaft (0.89 → 0.94 of shaft labels correct, neuron split). Macro F1 varies much between folds, because the retrain cohort has only 26 soma labels.
 
 ### Census track (the stat_summaries inputs)
 
@@ -315,7 +348,8 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 | 5 | C-left, E-left | P11, P9 | `stat_summaries.py` |
 | 5 | C-right, E-right, F | P9 (P8 distances) | `stat_summaries.py` |
 | 5 | G-left, H | P12, P9, P11 | `stat_summaries.py` |
-| 6 | A-C | P5 | `meshrep/sandbox/h01_validation.py` (not ported) |
+| 6 | A-C | P5 | `scripts/validation/h01_validation.py` |
+| H01 retraining (revision) | - | P5 (`h01_retrain_model_inputs`), `model_inputs` | `scripts/h01/retrain_h01.py` |
 | S2 | - | P2, P3 | `scripts/model/train.py` |
 | S3 | - | P4 | `meshrep/clean_paper_code/compare_to_neurd.py` (not ported) |
 | S4 | - | P9 | `stat_summaries.py` |

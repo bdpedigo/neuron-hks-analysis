@@ -1,9 +1,16 @@
-"""P5: the H01 labels (S12) and their cells, read at the labeling time (v1054).
+"""P5: the H01 labels (S12), their features and predictions, at the labeling time
+(v1054).
 
 The labels are points in 16 neuroglancer states, exported once to
 `data/tables/h01/states/` by `scripts/h01/export_h01_states.py`. Two cohorts:
-`validation` (the Fig 6 states) and `retrain`. The model never saw H01 data, so
-both cohorts are held out.
+`validation` (the Fig 6 states) and `retrain` (a later labeling round on other
+cells). Model work (other models, retraining with H01 labels) reads only the
+`retrain` cohort, through `h01_retrain_model_inputs`, so the `validation`
+cohort stays held out.
+
+The tables follow the MICrONS chain with an `h01_` prefix: `h01_labels`,
+`h01_root_nuclei`, `h01_labeled_synapse_features`, `h01_model_inputs`, and
+`h01_predictions` (the deployment's predictions).
 """
 
 import json
@@ -14,7 +21,25 @@ from nglui.parser import StateParser
 
 from ..io import TABLE_PATH
 from .catalog import Tables, write_parquet_atomic
-from .sources import H01_DATASTACK, H01_INPUTS_PATH, H01_SYNAPSES_PATH, H01_VERSION
+from .features import add_distance_to_nucleus, synapse_domain_join
+from .predictions import synapse_posteriors
+from .sources import (
+    DOMAIN_FEATURES_PARAMS,
+    DOMAIN_FEATURES_VERSION,
+    DOMAIN_PREDICTIONS_PARAMS,
+    DOMAIN_PREDICTIONS_VERSION,
+    H01_AS_OF,
+    H01_DATASTACK,
+    H01_INPUTS_PATH,
+    H01_NUCLEI_PATH,
+    H01_SYNAPSES_PATH,
+    H01_VERSION,
+    SYNAPSE_MAPPING_PARAMS,
+    SYNAPSE_MAPPING_VERSION,
+    VERTEX_DOMAINS_PARAMS,
+    VERTEX_DOMAINS_VERSION,
+    deployment_path,
+)
 
 H01_TABLE_PATH = TABLE_PATH / "h01"
 H01_FOLDER = f"{H01_DATASTACK}/v{H01_VERSION}"
@@ -156,5 +181,91 @@ Tables.register(
     .agg(n_labels=pl.len())
     .sort("root_id"),
     cache_params={"h01_labels": Tables["h01_labels"].cache_key},
+    folder=H01_FOLDER,
+)
+
+
+def fetch_h01_root_nuclei() -> pl.DataFrame:
+    """One row per nucleus on a root, with the nucleus point in nm: the snapshot
+    rows that the deployment read, in the columns of `root_nuclei`."""
+    return (
+        pl.scan_delta(str(H01_NUCLEI_PATH))
+        .select(
+            pl.col("pt_root_id").alias("root_id"),
+            pl.col("id").alias("nucleus_id"),
+            *[
+                pl.col(f"pt_position_{c}").cast(pl.Float64).alias(f"nucleus_{c}")
+                for c in "xyz"
+            ],
+        )
+        .sort("root_id", "nucleus_id")
+        .collect()
+    )
+
+
+Tables.register(
+    "h01_root_nuclei",
+    materialize=lambda path: write_parquet_atomic(fetch_h01_root_nuclei(), path),
+    cache_params={"inputs": str(H01_INPUTS_PATH)},
+    folder=H01_FOLDER,
+)
+
+_SPECTRAL_PINS = {
+    "as_of": H01_AS_OF.isoformat(),
+    "synapse_mapping_version": SYNAPSE_MAPPING_VERSION,
+    "synapse_mapping_params": SYNAPSE_MAPPING_PARAMS,
+    "vertex_domains_version": VERTEX_DOMAINS_VERSION,
+    "vertex_domains_params": VERTEX_DOMAINS_PARAMS,
+}
+
+Tables.register(
+    "h01_labeled_synapse_features",
+    materialize=lambda path: write_parquet_atomic(
+        synapse_domain_join(
+            Tables["h01_labels"].collect(),
+            deployment_path("domain_features", H01_DATASTACK),
+            as_of=H01_AS_OF,
+            datastack=H01_DATASTACK,
+        ),
+        path,
+    ),
+    cache_params={
+        "h01_labels": Tables["h01_labels"].cache_key,
+        **_SPECTRAL_PINS,
+        "domain_features_version": DOMAIN_FEATURES_VERSION,
+        "domain_features_params": DOMAIN_FEATURES_PARAMS,
+    },
+    folder=H01_FOLDER,
+)
+
+# NOTE: like `model_inputs`, this adds `distance_to_nucleus`, which the
+# deployment computes in its prediction step rather than in `domain_features`.
+Tables.register(
+    "h01_model_inputs",
+    lambda: add_distance_to_nucleus(
+        Tables["h01_labeled_synapse_features"].lazy(), Tables["h01_root_nuclei"].lazy()
+    ),
+)
+
+# The only H01 rows that model work may read; see the module docstring.
+Tables.register(
+    "h01_retrain_model_inputs",
+    lambda: Tables["h01_model_inputs"].lazy().filter(pl.col("cohort") == "retrain"),
+)
+
+Tables.register(
+    "h01_predictions",
+    materialize=lambda path: write_parquet_atomic(
+        synapse_posteriors(
+            Tables["h01_labels"].collect(), as_of=H01_AS_OF, datastack=H01_DATASTACK
+        ),
+        path,
+    ),
+    cache_params={
+        "h01_labels": Tables["h01_labels"].cache_key,
+        **_SPECTRAL_PINS,
+        "domain_predictions_version": DOMAIN_PREDICTIONS_VERSION,
+        "domain_predictions_params": DOMAIN_PREDICTIONS_PARAMS,
+    },
     folder=H01_FOLDER,
 )

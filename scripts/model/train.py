@@ -1,14 +1,10 @@
 # %%
-import shutil
 import time
 
 import matplotlib.pyplot as plt
-import mlflow.sklearn
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from mlflow.models import infer_signature
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from tqdm.auto import tqdm
@@ -16,15 +12,20 @@ from upath import UPath
 
 from analysis import (
     FIG_PATH,
-    MODEL_PATH,
     Tables,
     save_matplotlib_figure,
     save_variables,
     set_matplotlib_theme,
 )
-from analysis.products.sources import (
-    DOMAIN_FEATURES_PARAMS,
-    DOMAIN_FEATURES_VERSION,
+from analysis.models import (
+    MAIN_MODEL,
+    MODEL_SPECS,
+    NUCLEUS_MASK_FRACTION,
+    RF_PARAMS,
+    make_model,
+    nucleus_masked_roots,
+    save_model,
+    select_spectral_columns,
 )
 
 # %%
@@ -37,13 +38,13 @@ base = UPath(base)
 
 # %%
 
-joined = Tables["training_features"].lazy()
+joined = Tables["model_inputs"].lazy()
 
 joined.collect_schema()
 # %%
 
 start_time = time.time()
-result = Tables["training_features"].collect()
+result = Tables["model_inputs"].collect()
 end_time = time.time()
 print("Collection time:", end_time - start_time)
 
@@ -52,22 +53,7 @@ print("Collection time:", end_time - start_time)
 set_matplotlib_theme()
 figure_out_path = FIG_PATH / "model_training"
 
-FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
-spectral_columns = [c for c in result.columns if c.startswith(FEATURE_PREFIXES)]
-
-# NOTE: `distance_to_nucleus` is null for a root with no nucleus point. The
-# random forest accepts missing values, so those rows stay in. See also the mask
-# below.
-MODEL_SPECS = {
-    "ssa_model_full": dict(extra_features=["distance_to_nucleus"], binary=False),
-    "ssa_model_no_nuc": dict(extra_features=[], binary=False),
-    "ssa_model_binary": dict(extra_features=[], binary=True),
-}
-# The learning curve, the glued variables and every downstream figure use this one.
-MAIN_MODEL = "ssa_model_full"
-# NOTE: a published model name is write-once in meshmash-deployment, so bump this
-# before publishing a retrained model.
-MODEL_VERSION = "v1"
+spectral_columns = select_spectral_columns(result.columns)
 
 # rows without domain features (not yet processed by the meshmash deployment) can't
 # be used for training or evaluation. Every variant trains on these same rows.
@@ -78,20 +64,11 @@ sample_weight = training_table["sample_weight"].astype(float)
 
 save_variables(model_n_training_synapses=len(training_table), format="{:,}")
 
-# NOTE: almost every training root has a nucleus, but many deployment roots do not
-# (for example, orphan fragments). Without masking, the forest sees almost no missing
-# distances and sends them down whichever branch is larger. So the distance is set
-# to null on a fixed share of the training roots. The mask is by root, the same way
-# a missing nucleus looks in the deployment.
-NUCLEUS_MASK_FRACTION = 0.2
-NUCLEUS_MASK_SEED = 0
+# The nucleus mask: see `analysis.models`.
 save_variables(params_nucleus_mask_fraction=NUCLEUS_MASK_FRACTION)
-
-_roots = np.sort(training_table["root_id"].unique())
-nucleus_masked_roots = np.random.default_rng(NUCLEUS_MASK_SEED).permutation(_roots)[
-    : round(NUCLEUS_MASK_FRACTION * len(_roots))
-]
-nucleus_masked = training_table["root_id"].isin(nucleus_masked_roots)
+nucleus_masked = training_table["root_id"].isin(
+    nucleus_masked_roots(training_table["root_id"])
+)
 
 
 def make_xy(spec):
@@ -106,42 +83,10 @@ def make_xy(spec):
     return X, y
 
 
-RF_PARAMS = dict(class_weight="balanced", max_depth=15, n_estimators=500)
 save_variables(
     params_rf_max_depth=RF_PARAMS["max_depth"],
     params_rf_n_estimators=RF_PARAMS["n_estimators"],
 )
-
-
-def make_model(random_state):
-    return RandomForestClassifier(**RF_PARAMS, n_jobs=-1, random_state=random_state)
-
-
-def save_model(model, X, name):
-    # Saved in the MLflow model format, which records this environment and the
-    # feature signature. meshmash-deployment publishes it from this directory with
-    # `just publish-model`; it refuses a model without `classes` and `trained_on`.
-    # The folder name is also the published name. A rerun at the same MODEL_VERSION
-    # replaces the local folder.
-    model_dir = MODEL_PATH / f"{name}_{MODEL_VERSION}"
-    shutil.rmtree(model_dir, ignore_errors=True)  # save_model refuses a non-empty path
-    mlflow.sklearn.save_model(
-        model,
-        str(model_dir),
-        signature=infer_signature(X.head(5), model.predict_proba(X.head(5))),
-        metadata={
-            "classes": [str(label) for label in model.classes_],
-            # The domain_features table the training rows were joined from.
-            "trained_on": {
-                "product": "domain_features",
-                "param_hash": DOMAIN_FEATURES_PARAMS,
-                "step_version": DOMAIN_FEATURES_VERSION,
-            },
-        },
-        # skops refuses tree internals unless named; this model is our own.
-        skops_trusted_types=["sklearn.tree._tree.Tree"],
-    )
-    return model_dir
 
 
 # %% train and save each variant on all available synapses

@@ -87,6 +87,7 @@ H01_INPUTS_PATH = BASE_CLOUD_PATH / "_inputs" / H01_DATASTACK / f"v{H01_VERSION}
 H01_SYNAPSES_PATH = (
     H01_INPUTS_PATH / "synapses_using_sample_voxel_coords" / "post_pt_root_id"
 )
+H01_NUCLEI_PATH = H01_INPUTS_PATH / "nucleus" / "flat"
 
 # NOTE: the deployment tables are append-only, and the latest attempt per root
 # wins at read time. A read with an `as_of` cutoff ignores the attempts after
@@ -106,3 +107,7 @@ VALIDATION_AS_OF = datetime(2026, 10, 13, 5, 0, tzinfo=timezone.utc)
 # skeleton, which is the v1822 timestamp. `skeleton.py` asserts this per file,
 # because a file that is overwritten in place keeps its path.
 SKELETON_PATH = UPath("gs://csm-skel/osy/minnie65/skel")
+
+# The h01 job (run-20261013-224416-dcc1) was complete at this time: all 160
+# roots, last commit 2026-10-14 14:47 UTC.
+H01_AS_OF = datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc)

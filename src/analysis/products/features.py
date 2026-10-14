@@ -230,7 +230,7 @@ def add_distance_to_nucleus(
 # NOTE: meshmash-deployment computes `distance_to_nucleus` in its prediction step,
 # not in `domain_features`, so the training rows get the feature here
 Tables.register(
-    "training_features",
+    "model_inputs",
     lambda: add_distance_to_nucleus(
         Tables["labeled_synapse_features"].lazy(), Tables["root_nuclei"].lazy()
     ),
