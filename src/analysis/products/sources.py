@@ -101,3 +101,8 @@ LABELED_AS_OF = datetime(2026, 10, 12, 4, 13, tzinfo=timezone.utc)
 # The microns_validation job (run-20261012-235436-628a) was complete at this
 # time: all 132 roots, last commit 2026-10-13 04:57 UTC.
 VALIDATION_AS_OF = datetime(2026, 10, 13, 5, 0, tzinfo=timezone.utc)
+
+# NOTE: the ossify skeletons (S5) carry the synapses at the time of the
+# skeleton, which is the v1822 timestamp. `skeleton.py` asserts this per file,
+# because a file that is overwritten in place keeps its path.
+SKELETON_PATH = UPath("gs://csm-skel/osy/minnie65/skel")

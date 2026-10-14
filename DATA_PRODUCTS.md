@@ -104,7 +104,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 - [x] `products/sources.py` points at the s3 paths, with `as_of` = 2026-10-12 04:13 UTC. The labeled job is complete, except for 1 root (a large merge that cannot be processed).
 - [x] Rebuild: `just materialize labeled_synapse_features`.
 - [x] Keep the three old s2 `labeled_synapse_features-*` files in `data/tables/v1822/` until P3 is retrained. The s2 paths are gone, so these files are the only copy of the features that `synapse_hks_model_on_bulk` was trained on.
-- [ ] P3 is retrained on s3. Delete or archive the three old s2 files.
+- [x] P3 is retrained on s3. Delete or archive the three old s2 files.
 - [x] After the build: check the share of label synapses with non-null features, and check the failed merge root for partial rows from a crashed attempt.
   - Result: 111,640 of 133,686 synapse labels (83.5%) have all features, on 6,009 roots. The other synapse labels are on 12,683 roots with fewer than 5 labels, which the job did not include. The failed root `864691135858491438` (17 labels) has no rows, so no partial attempt is in the table. 10 roots have features for only some of their synapses.
 
@@ -187,7 +187,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 
 **P5 `h01_validation`** (H01 labeled, small)
 - Origin: S12 ⋈ S13, joined the same way as P15. Pin: S12 + S13. Kind: rebuildable.
-- [ ] Run a deployment job on the `h01_c3_flat` datastack for the annotated roots, in the same format as the MICrONS jobs.
+- [x] Run a deployment job on the `h01_c3_flat` datastack for the annotated roots, in the same format as the MICrONS jobs.
 - [ ] Port from `meshrep/sandbox/h01_validation.py` (not `clean_paper_code`).
 - [ ] Panel outputs: Fig 6A-C, glued `h01_validation_exc_f1`.
 - [ ] The MICrONS bar in 6A is hard-coded (0.977, at line 588 of the sandbox script). Read `validation_exc_f1` (written by `validation.py` from P4) instead.
@@ -201,17 +201,37 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 - [x] Moved the `proofread` / `column` / thalamic rules into `select_cells` in `products/cell_selection.py`, registered as `cell_selection`.
   - `tables.py` and `stat_summaries.py` both call `select_cells`. `tests/test_cell_selection.py` tests the rules.
 - Glued counts (1,352 cells: 1,182 E, 150 I, 20 TH) will change at v1822.
+- [x] Fixed the boolean parsing in `load_neuron_info`. At v1822, CAVE gives `axon_cleaned` and `status_dendrite` as booleans, not as `'t'`/`'f'`. So the old cache had 0 proofread cells. `_as_bool` in `io.py` reads both encodings.
+  - Result at v1822: 1,405 proofread cells (1,182 E, 150 I, 73 TH) and 1,332 column cells.
+  - The thalamic count changed from 20 to 73. At v1822, 73 roots have `status_dendrite` False and `strategy_dendrite` `none`.
 
 **P7 `synapse_structure`** (all)
 - Origin: S2 `synapse_mapping` ⋈ S4 `vertex_structures`. Pin: S2 + S4. Kind: cloud (a lazy join, no cache of the whole table).
 - Gives `structure_id` per synapse. Per structure, this gives `n_synapses`, `n_pre_root_ids` and `is_multi`. This replaces the old `synapse_component_deltalake`.
 - [ ] Needed for **all** synapses, because P10 needs multi-input spine rates for every neuron (Fig 4B, S5, S6).
 
-**P8 `skeleton_synapse_features`** (selection, about 100 MB)
-- Origin: S5 + S0 synapse positions. Pin: S5 + v1822. Kind: rebuildable.
-- Fields: `compartment`, `path_distance_to_nuc`, `euc_distance_to_nuc`, `max_dist_to_tip`, and maybe `soma_relative_centroid`.
-- [ ] Finish `scripts/skeleton/pull_skeleton_info.py`.
-- The figures use pre-side fields for proofread axons and post-side fields for column cells. `primary_branch_id` and `segment_id` are not used by any figure.
+**P8 `skeleton_synapse_features`** (proofread cells, 5.6M rows, 199 MB)
+- Origin: S5 ⋈ `root_nuclei`. The synapses and their positions come from the `pre_syn` and `post_syn` layers of each skeleton file, not from S0. Pin: S5 + v1822. Cache: `data/tables/v1822/skeleton_synapse_features/{hash}.parquet`. Kind: rebuildable.
+- [x] Registered as `skeleton_synapse_features` in `products/skeleton.py`. Build: `just materialize skeleton_synapse_features` (about 2 minutes). The cache key includes the `cell_selection` and `root_nuclei` cache keys, the skeleton path and the tip parameters.
+  - `load_skeleton` asserts that the timestamp of each skeleton file is the v1822 timestamp.
+  - `scripts/skeleton/pull_skeleton_info.py` checks the features on one cell.
+- Long format: one row per synapse and side, for every proofread root. P9 pivots it to `{pre,post}_*` columns on `synapse_id`.
+- Columns: `synapse_id`, `root_id`, `side`, `compartment`, `path_distance_to_nuc`, `max_dist_to_tip`, `ctr_pt_position_{x,y,z}`, `euc_distance_to_nuc`. All distances are in nm.
+- Compartment rule, from the skeleton vertex that the synapse maps to:
+  - `is_axon` True → `axon`. Axon wins over soma.
+  - `is_axon` False and the vertex is the root → `soma`. The old name was `perisoma`.
+  - Otherwise → `dendrite`.
+- `path_distance_to_nuc` is the path distance along the skeleton to the root. `euc_distance_to_nuc` is the straight distance to the nearest nucleus on the root (the same rule as `distance_to_nucleus` in P3).
+- `max_dist_to_tip`: the path distance to the farthest real tip below the synapse's vertex. A real tip is a tip that is not axon, with no branch point within 3 hops above it. Vertices with no real tip below them take the parent's value, for up to 4 rounds. The value is null on the pre side and on axon synapses.
+  - The old code removed the axon before it found the tips. The new code keeps the topology and excludes only the axon tips.
+- Dropped: `primary_branch_id`, `segment_id` and `soma_relative_centroid_*`. No figure uses them.
+- Check against the old v1412 tables, on 5 column cells with the same root ID at v1412 and v1822: the synapse sets are the same, and the compartments agree on 99.8% to 100% of the synapses. `path_distance_to_nuc` and `max_dist_to_tip` have a correlation of 1.0 with the old values.
+- Result:
+  - Pre side: 1.06M rows (98.3% axon, 1.6% dendrite, 0.1% soma).
+  - Post side: 4.55M rows (97.3% dendrite, 2.4% soma, 0.5% axon).
+  - 8,839 of 4.53M dendrite and soma post synapses (0.2%) have no `max_dist_to_tip`. `euc_distance_to_nuc` has no nulls.
+- [ ] 74 proofread roots have no skeleton file: all 73 thalamic cells and the column cell `864691136674080135`. The thalamic cells matter only for the pre side, and the old tables did not include them either. In P9, their `pre_compartment` is null.
+- The figures use pre-side fields for proofread axons and post-side fields for column cells.
 
 **P9 `selection_synapses`** (replaces `filtered_synapses`, selection, about 300-500 MB)
 - Origin: S0 (selection) ⋈ P15 ⋈ P7 ⋈ P8 ⋈ P6 cell types ⋈ spatial transform. Pin: the pins of its inputs. Kind: rebuildable.
@@ -275,7 +295,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
   - `synapse_id`, `pre_pt_root_id`, `post_pt_root_id`, `pre_in_selection`, `post_in_selection`, `size`, `tag`, `tag_detailed`
   - `structure_id` (old `component_id` / `spine_group_id`), `spine_is_multi`, `spine_n_pre_pt_root_ids`, `spine_n_pre_synapses`, `spine_size_nm3`
   - `{pre,post}_{broad_type,cell_type}`, `pre_axon_cleaned`
-  - `{pre,post}_compartment`, `{pre,post}_path_distance_to_nuc`, `max_dist_to_tip`
+  - `{pre,post}_compartment`, `{pre,post}_path_distance_to_nuc`, `max_dist_to_tip` (from the post side of P8)
   - `post_euc_distance_to_nuc`, `transformed_um_{x,y,z}`, `ctr_pt_position_{x,y,z}`
 - **P10:** the `post_*` counts and proportions listed under P10.
 - **P11:** the columns listed under P11.

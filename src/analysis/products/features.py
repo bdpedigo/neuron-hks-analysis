@@ -185,15 +185,21 @@ Tables.register(
 )
 
 
-def add_distance_to_nucleus(lf: pl.LazyFrame, nuclei: pl.LazyFrame) -> pl.LazyFrame:
-    """Add `distance_to_nucleus`: the Euclidean distance (nm) from each row's domain
-    centroid (`domain_x/y/z`) to the nearest nucleus point on its root.
+def add_distance_to_nucleus(
+    lf: pl.LazyFrame,
+    nuclei: pl.LazyFrame,
+    position: tuple[str, str, str] = ("domain_x", "domain_y", "domain_z"),
+    name: str = "distance_to_nucleus",
+) -> pl.LazyFrame:
+    """Add `name`: the Euclidean distance (nm) from each row's `position` columns
+    (by default the domain centroid) to the nearest nucleus point on its root.
 
     `nuclei` has one row per nucleus, so a root can have several. The value is null
-    for a root with no nucleus, and for a row with no domain centroid.
+    for a root with no nucleus, and for a row with no position.
     """
+    x, y, z = position
     distances = (
-        lf.select("root_id", "domain_x", "domain_y", "domain_z")
+        lf.select("root_id", x, y, z)
         .with_row_index("_row")
         .join(
             nuclei.select("root_id", "nucleus_x", "nucleus_y", "nucleus_z"),
@@ -202,13 +208,14 @@ def add_distance_to_nucleus(lf: pl.LazyFrame, nuclei: pl.LazyFrame) -> pl.LazyFr
         )
         .group_by("_row")
         .agg(
-            distance_to_nucleus=(
-                (pl.col("domain_x") - pl.col("nucleus_x")) ** 2
-                + (pl.col("domain_y") - pl.col("nucleus_y")) ** 2
-                + (pl.col("domain_z") - pl.col("nucleus_z")) ** 2
+            (
+                (pl.col(x) - pl.col("nucleus_x")) ** 2
+                + (pl.col(y) - pl.col("nucleus_y")) ** 2
+                + (pl.col(z) - pl.col("nucleus_z")) ** 2
             )
             .sqrt()
             .min()
+            .alias(name)
         )
     )
     # NOTE: the left join keeps the input row order, because the random forest's

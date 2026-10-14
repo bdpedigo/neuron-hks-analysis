@@ -1,27 +1,24 @@
 #%%
-import humanize
-import ossify as osy
-from upath import UPath
+# Checks of P8 `skeleton_synapse_features` on one cell. The product itself is
+# built with `just materialize skeleton_synapse_features`.
+import matplotlib.pyplot as plt
+import polars as pl
 
-test_skeleton_path = "gs://csm-skel/osy/minnie65/skel/864691134885292282.osy"
+from analysis.products.skeleton import load_skeleton, skeleton_synapse_features
 
-print(humanize.naturalsize(UPath(test_skeleton_path).stat().st_size))
+root_id = 864691134885292282
 
-cell = osy.load_cell(
-    test_skeleton_path
-)
+cell = load_skeleton(root_id)
+features = skeleton_synapse_features(cell)
 
-#%%
-
-cell.skeleton.nodes
+print(features.group_by("side", "compartment").len().sort("side", "compartment"))
 
 #%%
-cell.annotations['post_syn'].nodes
+post = features.filter(pl.col("side") == "post", pl.col("compartment") != "axon")
 
-# for each pre and post synapse we want to save out the
-# - geodesic distance to root, 
-# - the compartment prediction,
-# - the distance to nucleus? or that happens elsewhere
-# - the distance to tips? or did I even use this for anything
-# - the primary branch ID? again did I even use this for anything
-# - the soma relative centroid x,y,z (did this need the standard transform)
+fig, axs = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
+for ax, column in zip(axs, ["path_distance_to_nuc", "max_dist_to_tip"]):
+    ax.hist(post[column].drop_nulls() / 1000, bins=50)
+    ax.set_xlabel(f"{column} (µm)")
+axs[0].set_ylabel("Post synapses")
+fig.suptitle(f"{root_id}, dendrite and soma post synapses")

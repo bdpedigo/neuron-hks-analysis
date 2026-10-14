@@ -1,5 +1,6 @@
 import pandas as pd
 
+from analysis.io import _as_bool
 from analysis.products.cell_selection import (
     COLUMN_SOURCE,
     column_roots,
@@ -32,3 +33,8 @@ def test_duplicate_roots_dropped():
     info = _cell_info()
     info.index = pd.Index([1, 2, 3, 4, 1], name="pt_root_id")
     assert list(proofread_roots(select_cells(info))) == [2]
+
+
+def test_as_bool_reads_both_encodings():
+    values = pd.Series(["t", "f", True, False, None])
+    assert list(_as_bool(values)) == [True, False, True, False, False]

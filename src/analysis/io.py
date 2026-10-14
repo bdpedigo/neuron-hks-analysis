@@ -514,6 +514,12 @@ def _fetch_proofreading_table(version=VERSION, **query_args):
     )
 
 
+def _as_bool(values: pd.Series) -> pd.Series:
+    """Parse a CAVE boolean column, which is `'t'`/`'f'` in old versions and
+    `True`/`False` from v1822 on. A missing value is False."""
+    return values.map({True: True, False: False, "t": True, "f": False}).eq(True)
+
+
 def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=True):
     query_args = dict(desired_resolution=[1, 1, 1], split_positions=True)
 
@@ -521,7 +527,7 @@ def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=Tru
 
     cell_info.drop_duplicates("pt_root_id", keep=False, inplace=True)
     cell_info.set_index("pt_root_id", inplace=True)
-    cell_info["axon_cleaned"] = cell_info["axon_cleaned"] == "t"
+    cell_info["axon_cleaned"] = _as_bool(cell_info["axon_cleaned"])
 
     if transform_positions:
         tform = minnie_transform_nm()
@@ -534,9 +540,10 @@ def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=Tru
             version=version, **query_args
         ).to_pandas()
 
-        thalamic_table = proofreading_table.query("status_dendrite=='f'").query(
-            "strategy_dendrite=='none'"
-        )
+        thalamic_table = proofreading_table[
+            ~_as_bool(proofreading_table["status_dendrite"])
+            & (proofreading_table["strategy_dendrite"] == "none")
+        ]
         thalamic_roots = thalamic_table["pt_root_id"].unique()
 
         root_ids = cell_info.index.unique()
