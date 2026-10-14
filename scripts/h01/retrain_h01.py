@@ -378,16 +378,17 @@ for experiment, (*_, held_out) in EXPERIMENTS.items():
             linestyle="none",
             markers="_",
             markersize=20,
-            color="black",
+            palette="dark:black",
             errorbar=None,
             ax=ax,
             legend=False,
         )
-        ax.set(xlabel="", ylabel=f"Macro F1 on held-out H01 {held_out}", title=title)
+        ax.set(xlabel="", ylabel="", title=title)
         ax.set_xticks(
             range(len(names)),
             [n.removeprefix("ssa_model_") for n in names],
             rotation=30,
         )
+    axs[0].set_ylabel(f"Macro F1\n(held-out H01 {held_out})")
     sns.move_legend(axs[1], "upper left", bbox_to_anchor=(1, 1), title="")
     save_matplotlib_figure(fig, f"retrain_all_models_{experiment}", subfolder=SUBFOLDER)

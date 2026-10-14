@@ -240,6 +240,17 @@ The original records of these labels are neuroglancer states or notebooks. A sta
     | synapse | `both_upweighted` | 0.964 ± 0.011 | 0.936 ± 0.058 | |
 
     The H01 rows help most on shaft (0.89 → 0.94 of shaft labels correct, neuron split). Macro F1 varies much between folds, because the retrain cohort has only 26 soma labels.
+  - The script now runs every variant in `MODEL_SPECS`, and saves the fold results of each to `data/h01_retrain/{experiment}/{variant}.parquet`. A saved result is read instead of fit again. Delete the folder after a change to the rows, the features or the forest. The neuron split is off (`RUN_NEURON_SPLIT = False`), so the HKS variants have synapse split results only. The glued variables and the per-experiment figures are for the main model. `retrain_all_models_synapse_split` shows every variant.
+  - Result, all variants, synapse split (mean ± standard deviation over 10 folds):
+
+    | Variant | Weighted F1, MICrONS only | Weighted F1, both | Macro F1, MICrONS only | Macro F1, both | Wilcoxon p (macro F1) |
+    |---|---|---|---|---|---|
+    | `ssa_model_full` | 0.956 ± 0.016 | 0.964 ± 0.011 | 0.899 ± 0.076 | 0.936 ± 0.058 | 0.002 |
+    | `ssa_model_no_nuc` | 0.954 ± 0.014 | 0.961 ± 0.010 | 0.883 ± 0.066 | 0.906 ± 0.051 | 0.006 |
+    | `ssa_model_hks` | 0.948 ± 0.011 | 0.950 ± 0.012 | 0.870 ± 0.054 | 0.892 ± 0.062 | 0.027 |
+    | `ssa_model_hks_nuc` | 0.948 ± 0.011 | 0.956 ± 0.017 | 0.858 ± 0.068 | 0.926 ± 0.073 | 0.037 |
+    | `ssa_model_binary` (2 classes) | 0.963 ± 0.012 | 0.971 ± 0.009 | 0.955 ± 0.014 | 0.964 ± 0.011 | 0.004 |
+    | `ssa_model_hks_binary` (2 classes) | 0.956 ± 0.009 | 0.956 ± 0.012 | 0.947 ± 0.011 | 0.947 ± 0.014 | 0.55 |
 
 ### Census track (the stat_summaries inputs)
 
