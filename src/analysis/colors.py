@@ -121,17 +121,8 @@ COMPARTMENT_PALETTE_BREWER2 = {
 }
 
 
-def color_weights(model, posteriors):
-    rgb_colors = np.array([COMPARTMENT_PALETTE[label] for label in model.classes_])
-    rgb_colors = rgb_colors / 255
-    return np.dot(posteriors, rgb_colors)
-
-
-def predict_proba_colors(model, X):
-    posteriors = model.predict_proba(X)
-    rgb_colors = np.array([COMPARTMENT_PALETTE[label] for label in model.classes_])
-    rgb_colors = rgb_colors / 255
-    return np.dot(posteriors, rgb_colors)
+# NOTE: for the posterior-weighted blend of the label colors, use
+# `analysis.viz.style.posterior_rgb`, which reads the shared `LABEL_PALETTE`.
 
 
 # REF: https://scottplot.net/cookbook/5.0/palettes/

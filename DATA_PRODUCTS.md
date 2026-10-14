@@ -251,6 +251,21 @@ The original records of these labels are neuroglancer states or notebooks. A sta
     | `ssa_model_hks_nuc` | 0.948 ± 0.011 | 0.956 ± 0.017 | 0.858 ± 0.068 | 0.926 ± 0.073 | 0.037 |
     | `ssa_model_binary` (2 classes) | 0.963 ± 0.012 | 0.971 ± 0.009 | 0.955 ± 0.014 | 0.964 ± 0.011 | 0.004 |
     | `ssa_model_hks_binary` (2 classes) | 0.956 ± 0.009 | 0.956 ± 0.012 | 0.947 ± 0.011 | 0.947 ± 0.014 | 0.55 |
+- [x] Retrained models for viewing. The last cell of `retrain_h01.py` fits each variant once on all MICrONS rows and all H01 retrain rows (`both_upweighted`, no held-out fold). It saves them as `data/models/{variant}_h01_v1`. A saved model is read instead of fit again. These models trained on the labels of the retrain cells, so their predictions on those labels are not held out. Kind: rebuildable (the fit is seeded). They are not published.
+- [x] Whole-root viewers: `analysis.model_viewer` is the app, and two scripts run it. `scripts/model/view_microns_models.py` runs it on MICrONS cells (`--pool validation`, the default, or `--pool labeled`). `scripts/h01/view_retrain_models.py` shows the 6 variants x {no retrain, retrain} on one H01 retrain cell at a time (see "Whole-root data" below).
+
+### Whole-root data (viewers)
+
+- `load_root_cell(root_id, datastack)` in `products/roots.py` gives an ossify `Cell` for one root: the raw mesh, its domains (with `domain_features`, `distance_to_nucleus` and the deployment predictions), the synapses with their manual labels, and the nuclei. The module docstring lists the layers.
+  - `ROOT_SOURCES` names, for each datastack, the cutoff, the synapse source and its resolution, the nuclei table and the label tables.
+  - H01: S13 (`vertex_domains`, `domain_features`, `domain_predictions`, `synapse_mapping`, and the synapse snapshot), `h01_root_nuclei`, `h01_labels`. Pin: `STEP_PINS` + `H01_AS_OF`.
+  - MICrONS: S2 + S3 at `MICRONS_AS_OF` (= `VALIDATION_AS_OF`, after both MICrONS jobs), S0 for the synapses (voxels x (4, 4, 40)), `root_nuclei`, and the labels of `synapse_labels` and `validation_labels`. Only the 132 validation roots have deployment predictions; the other roots have null deployment columns.
+  - The mesh comes from CloudVolume through the CAVE segmentation source of the datastack.
+  - The mesh kwargs come from `_meshmash/identity.json` of the pinned `vertex_domains` table, so the mesh is the one that `mesh_index` indexes. A different vertex count raises.
+  - Without `allow_held_out=True`, a root of the H01 `validation` cohort raises.
+  - One H01 root takes about 50 s from the cloud (the mesh and `vertex_domains` take most of it).
+- Optional cache: `products/root_cache.cached(load_root_cell, max_roots=5)`. One `.osy` file per root (about 70 MB, mostly the mesh) at `data/root_cache/{datastack}/{pin hash}/{root_id}.osy`. The folder keeps the 5 files read last. Kind: rebuildable, for development only. No product reads it.
+- `analysis.viz` has the conventions that every pyvista view uses (`style.py`: the label palette in a fixed class order, the categorical settings with `interpolate_before_map=False`, the posterior blend), the `Scene` contract between data and viewer (`scene.py`), and the `Viewer` (`viewer.py`). The viewer builds the next root in a worker process while one root shows.
 
 ### Census track (the stat_summaries inputs)
 

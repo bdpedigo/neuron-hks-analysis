@@ -103,6 +103,18 @@ LABELED_AS_OF = datetime(2026, 10, 12, 4, 13, tzinfo=timezone.utc)
 # time: all 132 roots, last commit 2026-10-13 04:57 UTC.
 VALIDATION_AS_OF = datetime(2026, 10, 13, 5, 0, tzinfo=timezone.utc)
 
+# The MICrONS deployment tables hold two jobs: microns_top_labeled (features for
+# the 6,010 labeled roots) and microns_validation (features and predictions for the
+# 132 validation roots). This cutoff is after both, for the whole-root viewers.
+MICRONS_AS_OF = VALIDATION_AS_OF
+
+# S0: the public CAVE export of `synapses_pni_2` at v1822, the rows that the
+# deployment mapped to the meshes. Positions are in voxels.
+MICRONS_SYNAPSES_PATH = UPath(
+    "gs://mat_dbs/public/deltalake_exports/minnie65_phase3_v1/v1822/synapses_pni_2/post_pt_root_id"
+)
+MICRONS_SYNAPSE_RESOLUTION = (4.0, 4.0, 40.0)
+
 # NOTE: the ossify skeletons (S5) carry the synapses at the time of the
 # skeleton, which is the v1822 timestamp. `skeleton.py` asserts this per file,
 # because a file that is overwritten in place keeps its path.

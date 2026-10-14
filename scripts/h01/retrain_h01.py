@@ -34,12 +34,15 @@ from analysis import (
     save_variables,
     set_matplotlib_theme,
 )
+from analysis.io import MODEL_PATH
 from analysis.models import (
     MAIN_MODEL,
     MODEL_SPECS,
+    MODEL_VERSION,
     feature_columns,
     make_model,
     nucleus_masked_roots,
+    save_model,
     select_spectral_columns,
 )
 
@@ -392,3 +395,25 @@ for experiment, (*_, held_out) in EXPERIMENTS.items():
     axs[0].set_ylabel(f"Macro F1\n(held-out H01 {held_out})")
     sns.move_legend(axs[1], "upper left", bbox_to_anchor=(1, 1), title="")
     save_matplotlib_figure(fig, f"retrain_all_models_{experiment}", subfolder=SUBFOLDER)
+
+# %%
+# The retrained models for viewing: each variant fit once on all MICrONS rows and
+# all H01 retrain rows (the `both_upweighted` mode), with no held-out fold. They
+# are saved as `data/models/{variant}_h01_{MODEL_VERSION}`, next to the MICrONS
+# only models, so `load_ssa_model` reads either kind. A saved model is read
+# instead of fit again, as the fold results are.
+# NOTE: the labeled synapses of the retrain roots are in the training rows of these
+# models, so their predictions on those synapses are not held out.
+retrain_frame = pl.concat([h01, microns]).to_pandas()
+for name, spec in MODEL_SPECS.items():
+    model_name = f"{name}_h01"
+    if (MODEL_PATH / f"{model_name}_{MODEL_VERSION}").exists():
+        continue
+    print(f"final fit: {model_name}")
+    X = retrain_frame[feature_columns(spec, spectral_columns)]
+    y = retrain_frame["label"].to_numpy()
+    if spec["binary"]:
+        y = np.where(y == "spine", "spine", "not_spine")
+    model = make_model(random_state=0)
+    model.fit(X, y, sample_weight=retrain_frame["sample_weight"].to_numpy())
+    save_model(model, X, model_name)

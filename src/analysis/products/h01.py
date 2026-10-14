@@ -184,6 +184,12 @@ Tables.register(
     folder=H01_FOLDER,
 )
 
+# The cells that model work may look at; see the module docstring.
+Tables.register(
+    "h01_retrain_cells",
+    lambda: Tables["h01_cells"].lazy().filter(pl.col("cohort") == "retrain"),
+)
+
 
 def fetch_h01_root_nuclei() -> pl.DataFrame:
     """One row per nucleus on a root, with the nucleus point in nm: the snapshot

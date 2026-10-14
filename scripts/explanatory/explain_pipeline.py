@@ -246,7 +246,7 @@ save_pyvista_figure(
 )
 # %%
 select_evals = [5, 31, -50]
-select_evals = [5, 31, -1400]
+# select_evals = [5, 31, -1400]
 n_evals = len(select_evals)
 window_size = np.floor(np.array((8.04, 5.83)) * 100).astype(int)
 plotter = pv.Plotter(shape=(n_evals, 1), window_size=window_size, border_color="white")
