@@ -19,13 +19,11 @@ TABLE_WEIGHTS = {
 }
 
 
-def fetch_validation_cells(client, version=VERSION) -> pl.DataFrame:
-    """The validation cells (S9 nucleus IDs) with their root IDs at `version`."""
-    validation_path = TABLE_PATH / "validation" / "validation_ids_used.csv"
-    nucleus_ids = pd.read_csv(validation_path)["nucleus_id"].unique()
+def fetch_nucleus_roots(client, nucleus_ids, version=VERSION) -> pl.DataFrame:
+    """The root ID of each nucleus at `version`, as `nucleus_id`, `root_id`."""
     nuc_table = client.materialize.query_view(
         "nucleus_detection_lookup_v1",
-        filter_in_dict=dict(id=nucleus_ids),
+        filter_in_dict=dict(id=list(nucleus_ids)),
         materialization_version=version,
     )
     return pl.from_pandas(
@@ -33,6 +31,13 @@ def fetch_validation_cells(client, version=VERSION) -> pl.DataFrame:
             columns={"id": "nucleus_id", "pt_root_id": "root_id"}
         )
     )
+
+
+def fetch_validation_cells(client, version=VERSION) -> pl.DataFrame:
+    """The validation cells (S9 nucleus IDs) with their root IDs at `version`."""
+    validation_path = TABLE_PATH / "validation" / "validation_ids_used.csv"
+    nucleus_ids = pd.read_csv(validation_path)["nucleus_id"].unique()
+    return fetch_nucleus_roots(client, nucleus_ids, version=version)
 
 
 Tables.register(
