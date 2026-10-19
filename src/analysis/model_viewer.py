@@ -5,7 +5,9 @@ only or on MICrONS + the H01 retrain rows, on whole cells of any datastack in
 One mesh at a time. The checkboxes on the left choose the training rows, the
 variant, and what colors the mesh (the predicted label, the posterior blend,
 p(spine), or a feature from the slider). Every synapse shows the predicted label
-of its domain; a checkbox shows or hides them. Keys: `n` for the next cell, `b`
+of its domain; a checkbox shows or hides them. On H01, the `paper` training
+option shows the paper's model on the paper run's features (`products.paper_h01`)
+and ignores the variant. Keys: `n` for the next cell, `b`
 for the one before. Right-click flies the camera to the clicked point.
 
 The cells come in sorted order from a random start, so one session can visit all
@@ -21,9 +23,11 @@ from collections.abc import Callable, Sequence
 from functools import partial
 
 from .models import MODEL_SPECS, load_ssa_model, predict
+from .products.paper_h01 import load_paper_root, paper_vertex_posteriors
 from .products.root_cache import cached
 from .products.roots import domain_frame, feature_columns, load_root_cell
-from .viz import CellOrder, Slider, Viewer, cell_to_scene
+from .products.sources import H01_DATASTACK
+from .viz import CellOrder, Slider, Viewer, add_prediction, cell_to_scene
 
 # The retrained models come from the last cell of `scripts/h01/retrain_h01.py`.
 TRAINING = {"no retrain": "", "retrain": "_h01"}
@@ -34,6 +38,10 @@ MODELS = {
     for variant, name in VARIANTS.items()
 }
 COLORS = ["pred_label", "blend", "p(spine)", "feature"]
+# The `training` option that shows the paper's model on the paper run's features
+# (`products.paper_h01`), for the datastacks that have one. It ignores `variant`.
+PAPER = "paper"
+PAPER_DATASTACKS = (H01_DATASTACK,)
 MAX_CACHED_ROOTS = 5
 
 # Set in the worker process by `start_worker`.
@@ -58,11 +66,14 @@ def scene_for_root(root_id: int):
         key: predict(model, features, keys=("domain_id",))
         for key, model in _worker["models"].items()
     }
-    return cell_to_scene(cell, posteriors, feature_columns(datastack))
+    scene = cell_to_scene(cell, posteriors, feature_columns(datastack))
+    if datastack in PAPER_DATASTACKS:
+        add_prediction(scene, PAPER, "vertices", paper_vertex_posteriors(load_paper_root(root_id)))
+    return scene
 
 
 def resolve(state: dict):
-    model = f"{state['training']}/{state['variant']}"
+    model = PAPER if state["training"] == PAPER else f"{state['training']}/{state['variant']}"
     if state["color"] == "feature":
         channel = state["feature"]
     else:
@@ -83,7 +94,11 @@ def make_viewer(
     return Viewer(
         scene_for_root,
         CellOrder(roots, start=start, seed=seed),
-        selectors={"training": list(TRAINING), "variant": list(VARIANTS), "color": COLORS},
+        selectors={
+            "training": list(TRAINING) + ([PAPER] if datastack in PAPER_DATASTACKS else []),
+            "variant": list(VARIANTS),
+            "color": COLORS,
+        },
         resolve=resolve,
         sliders={
             "feature": Slider(

@@ -152,25 +152,36 @@ def cell_to_scene(
         )
 
     for model, table in posteriors.items():
-        table = _aligned(table, domain_ids)
-        classes = [c.removeprefix("posterior_") for c in table.columns if c.startswith("posterior_")]
-        classes = [c for c in classes if c in CLASS_ORDER]
-        probabilities = table.select(f"posterior_{c}" for c in classes).to_numpy().astype(np.float32)
-        predicted = label_codes(table["pred_label"].to_numpy())
-        scene.add(
-            Channel(
-                f"{model}/pred_label",
-                "domains",
-                "categorical",
-                predicted,
-                CLASS_ORDER,
-                note=_agreement(labels, _on_synapses(scene, predicted), classes),
-            )
-        )
-        scene.add(Channel(f"{model}/blend", "domains", "rgb", posterior_rgb(probabilities, classes)))
-        for i, name in enumerate(classes):
-            scene.add(Channel(f"{model}/p({name})", "domains", "scalar", probabilities[:, i]))
+        add_prediction(scene, model, "domains", _aligned(table, domain_ids))
     return scene
+
+
+def add_prediction(scene: Scene, model: str, basis: Basis, table: pl.DataFrame) -> None:
+    """Add the channels `{model}/pred_label`, `{model}/blend` and
+    `{model}/p({class})` from `table`, one row per element of `basis`, with
+    `posterior_<class>` and `pred_label` columns (null for none)."""
+    classes = [c.removeprefix("posterior_") for c in table.columns if c.startswith("posterior_")]
+    classes = [c for c in classes if c in CLASS_ORDER]
+    probabilities = table.select(f"posterior_{c}" for c in classes).to_numpy().astype(np.float32)
+    predicted = label_codes(table["pred_label"].to_numpy())
+    on_synapses = _take(
+        predicted, scene.synapse_domain if basis == "domains" else scene.synapse_vertex
+    )
+    labels = scene.channels["label"].values
+    labels = np.array([CLASS_ORDER[int(c)] if np.isfinite(c) else None for c in labels], dtype=object)
+    scene.add(
+        Channel(
+            f"{model}/pred_label",
+            basis,
+            "categorical",
+            predicted,
+            CLASS_ORDER,
+            note=_agreement(labels, on_synapses, classes),
+        )
+    )
+    scene.add(Channel(f"{model}/blend", basis, "rgb", posterior_rgb(probabilities, classes)))
+    for i, name in enumerate(classes):
+        scene.add(Channel(f"{model}/p({name})", basis, "scalar", probabilities[:, i]))
 
 
 def _take(values: np.ndarray, index: np.ndarray) -> np.ndarray:
@@ -180,6 +191,3 @@ def _take(values: np.ndarray, index: np.ndarray) -> np.ndarray:
     padded = np.concatenate([values, np.full((1, *values.shape[1:]), np.nan, values.dtype)])
     return padded[index]
 
-
-def _on_synapses(scene: Scene, domain_values: np.ndarray) -> np.ndarray:
-    return _take(domain_values, scene.synapse_domain)
