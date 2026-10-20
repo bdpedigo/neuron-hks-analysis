@@ -56,6 +56,49 @@ Tables.register(
 )
 
 
+def synapse_vertex_join(
+    synapses: pl.DataFrame,
+    vertex_product: str,
+    column: str,
+    *,
+    as_of: datetime,
+    datastack: str = DATASTACK,
+) -> pl.DataFrame:
+    """`root_id`, `synapse_id` and `column` of the vertex each synapse maps to, from
+    the per-vertex deployment table `vertex_product` (for example `vertex_domains`),
+    as the deployment tables were at `as_of`.
+
+    A synapse that `synapse_mapping` does not hold has no row. A mapped synapse on
+    a root that `vertex_product` does not hold has a null `column`.
+    """
+    root_ids = synapses["root_id"].unique().to_list()
+    mapping_lf, vertices_lf = latest_attempts(
+        [
+            scan_roots(deployment_path("synapse_mapping", datastack), root_ids, as_of=as_of),
+            scan_roots(deployment_path(vertex_product, datastack), root_ids, as_of=as_of),
+        ]
+    )
+    mapping = (
+        mapping_lf.filter(pl.col("synapse_id").is_in(synapses["synapse_id"].unique().to_list()))
+        .select("root_id", "synapse_id", "mesh_index")
+        .collect(engine="streaming")
+    )
+    # NOTE: a per-vertex table has a row per mesh vertex. The semi-join keeps only
+    # synapse vertices as the scan streams, so they are never all in memory.
+    vertices = (
+        vertices_lf.join(
+            mapping.lazy().select("root_id", "mesh_index").unique(),
+            on=["root_id", "mesh_index"],
+            how="semi",
+        )
+        .select("root_id", "mesh_index", column)
+        .collect(engine="streaming")
+    )
+    return mapping.join(vertices, on=["root_id", "mesh_index"], how="left").drop(
+        "mesh_index"
+    )
+
+
 def synapse_domain_join(
     synapses: pl.DataFrame,
     domain_table: UPath,
@@ -71,32 +114,10 @@ def synapse_domain_join(
     processed.
     """
     root_ids = synapses["root_id"].unique().to_list()
-    mapping_lf, domains_lf, domain_rows_lf = latest_attempts(
-        [
-            scan_roots(deployment_path("synapse_mapping", datastack), root_ids, as_of=as_of),
-            scan_roots(deployment_path("vertex_domains", datastack), root_ids, as_of=as_of),
-            scan_roots(domain_table, root_ids, as_of=as_of),
-        ]
+    synapse_domains = synapse_vertex_join(
+        synapses, "vertex_domains", "domain_id", as_of=as_of, datastack=datastack
     )
-    mapping = (
-        mapping_lf.filter(pl.col("synapse_id").is_in(synapses["synapse_id"].unique().to_list()))
-        .select("root_id", "synapse_id", "mesh_index")
-        .collect(engine="streaming")
-    )
-    # NOTE: vertex_domains has a row per mesh vertex. The semi-join keeps only
-    # synapse vertices as the scan streams, so they are never all in memory.
-    domains = (
-        domains_lf.join(
-            mapping.lazy().select("root_id", "mesh_index").unique(),
-            on=["root_id", "mesh_index"],
-            how="semi",
-        )
-        .select("root_id", "mesh_index", "domain_id")
-        .collect(engine="streaming")
-    )
-    synapse_domains = mapping.join(
-        domains, on=["root_id", "mesh_index"], how="left"
-    ).drop("mesh_index")
+    (domain_rows_lf,) = latest_attempts([scan_roots(domain_table, root_ids, as_of=as_of)])
     domain_rows = (
         domain_rows_lf.join(
             synapse_domains.lazy().select("root_id", "domain_id").drop_nulls().unique(),

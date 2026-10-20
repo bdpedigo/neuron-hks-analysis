@@ -15,7 +15,12 @@ import polars as pl
 from sklearn.ensemble import RandomForestClassifier
 
 from .io import MODEL_PATH
-from .products.sources import DOMAIN_FEATURES_PARAMS, DOMAIN_FEATURES_VERSION
+from .products.sources import (
+    DOMAIN_FEATURES_PARAMS,
+    DOMAIN_FEATURES_VERSION,
+    STRUCTURE_FEATURES_PARAMS,
+    STRUCTURE_FEATURES_VERSION,
+)
 
 FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
 
@@ -44,6 +49,42 @@ MAIN_MODEL = "ssa_model_full"
 MODEL_VERSION = "v1"
 
 RF_PARAMS = dict(class_weight="balanced", max_depth=15, n_estimators=500)
+
+# The table each kind of model is trained on, as the deployment names it. A
+# model records it, and the deployment's bind compares it with the table a run
+# reads.
+DOMAIN_TRAINED_ON = {
+    "product": "domain_features",
+    "param_hash": DOMAIN_FEATURES_PARAMS,
+    "step_version": DOMAIN_FEATURES_VERSION,
+}
+STRUCTURE_TRAINED_ON = {
+    "product": "structure_features",
+    "param_hash": STRUCTURE_FEATURES_PARAMS,
+    "step_version": STRUCTURE_FEATURES_VERSION,
+}
+
+# The unitary-spine model (P13): is a putative multi-input spine one spine with a
+# single head? The geometry columns come from `structure_morphometry`, the spectral
+# means from `structure_features`.
+UNITARY_GEOMETRY = [
+    "fiedler_eval",
+    "size_nm3",
+    "area_nm2",
+    "sphericity",
+    "pca_val_1",
+    "pca_val_2",
+    "pca_val_3",
+    "max_dt_nm",
+    "mean_dt_nm",
+    "bound_volume_um3",
+]
+UNITARY_MODEL_SPECS = {
+    "unitary_hks": dict(prefixes=HKS_PREFIXES, extra_features=UNITARY_GEOMETRY),
+    "unitary_spectral": dict(prefixes=FEATURE_PREFIXES, extra_features=UNITARY_GEOMETRY),
+}
+# NOTE: unlike RF_PARAMS, no class weights, as in the paper's model.
+UNITARY_RF_PARAMS = dict(max_depth=15, n_estimators=500)
 
 # NOTE: almost every training root has a nucleus, but many deployment roots do not
 # (for example, orphan fragments). Without masking, the forest sees almost no missing
@@ -83,7 +124,9 @@ def make_model(random_state) -> RandomForestClassifier:
     return RandomForestClassifier(**RF_PARAMS, n_jobs=-1, random_state=random_state)
 
 
-def save_model(model, X, name) -> Path:
+def save_model(
+    model, X, name, version=MODEL_VERSION, trained_on=DOMAIN_TRAINED_ON
+) -> Path:
     # Saved in the MLflow model format, which records this environment and the
     # feature signature. meshmash-deployment publishes it from this directory with
     # `just publish-model`; it refuses a model without `classes` and `trained_on`.
@@ -92,7 +135,7 @@ def save_model(model, X, name) -> Path:
     import mlflow.sklearn
     from mlflow.models import infer_signature
 
-    model_dir = MODEL_PATH / f"{name}_{MODEL_VERSION}"
+    model_dir = MODEL_PATH / f"{name}_{version}"
     shutil.rmtree(model_dir, ignore_errors=True)  # save_model refuses a non-empty path
     mlflow.sklearn.save_model(
         model,
@@ -100,12 +143,8 @@ def save_model(model, X, name) -> Path:
         signature=infer_signature(X.head(5), model.predict_proba(X.head(5))),
         metadata={
             "classes": [str(label) for label in model.classes_],
-            # The domain_features table the training rows were joined from.
-            "trained_on": {
-                "product": "domain_features",
-                "param_hash": DOMAIN_FEATURES_PARAMS,
-                "step_version": DOMAIN_FEATURES_VERSION,
-            },
+            # The deployment table the training rows were joined from.
+            "trained_on": trained_on,
         },
         # skops refuses tree internals unless named; this model is our own.
         skops_trusted_types=["sklearn.tree._tree.Tree"],

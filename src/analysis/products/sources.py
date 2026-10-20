@@ -24,6 +24,22 @@ DOMAIN_EDGES_PARAMS = "p-b60a113f02ed8102"
 DOMAIN_PREDICTIONS_VERSION = "s1"
 DOMAIN_PREDICTIONS_PARAMS = "p-96cea889064d4d41"
 
+# The spine structures of the microns_column job, cut from the domain_predictions
+# above with structure_label "spine".
+STRUCTURE_MORPHOMETRY_VERSION = "s2"
+STRUCTURE_MORPHOMETRY_PARAMS = "p-e33a7e6b422f4478"
+
+VERTEX_STRUCTURES_VERSION = "s2"
+VERTEX_STRUCTURES_PARAMS = "p-f66b62064229c386"
+
+STRUCTURE_FEATURES_VERSION = "s2"
+STRUCTURE_FEATURES_PARAMS = "p-b1075faa185aca66"
+
+# NOTE: the structure_predictions hash includes the model, here the trial model
+# `unitary_trial_s3` (jobs/unitary_trial).
+STRUCTURE_PREDICTIONS_VERSION = "s1"
+STRUCTURE_PREDICTIONS_PARAMS = "p-428b47dd3d1cf618"
+
 SYNAPSE_MAPPING_PATH = (
     BASE_CLOUD_PATH
     / DATASTACK
@@ -66,6 +82,10 @@ STEP_PINS = {
     "domain_features": (DOMAIN_FEATURES_VERSION, DOMAIN_FEATURES_PARAMS),
     "domain_edges": (DOMAIN_EDGES_VERSION, DOMAIN_EDGES_PARAMS),
     "domain_predictions": (DOMAIN_PREDICTIONS_VERSION, DOMAIN_PREDICTIONS_PARAMS),
+    "structure_morphometry": (STRUCTURE_MORPHOMETRY_VERSION, STRUCTURE_MORPHOMETRY_PARAMS),
+    "vertex_structures": (VERTEX_STRUCTURES_VERSION, VERTEX_STRUCTURES_PARAMS),
+    "structure_features": (STRUCTURE_FEATURES_VERSION, STRUCTURE_FEATURES_PARAMS),
+    "structure_predictions": (STRUCTURE_PREDICTIONS_VERSION, STRUCTURE_PREDICTIONS_PARAMS),
 }
 
 
@@ -107,6 +127,18 @@ VALIDATION_AS_OF = datetime(2026, 10, 13, 5, 0, tzinfo=timezone.utc)
 # the 6,010 labeled roots) and microns_validation (features and predictions for the
 # 132 validation roots). This cutoff is after both, for the whole-root viewers.
 MICRONS_AS_OF = VALIDATION_AS_OF
+
+# NOTE: the microns_column job (run-20261019-225728-5f65) was still running at
+# this time: 931 of 1,402 roots had structures, 48 of them unitary-label roots.
+# An attempt that started before the cutoff and committed after it shows up in
+# a later read, so this pin is good for the unitary trial only. Move it past the
+# last commit before a product depends on it.
+COLUMN_JOB_AS_OF = datetime(2026, 10, 20, 4, 30, tzinfo=timezone.utc)
+
+# The unitary_trial job (run-20261020-051857-f02b) was complete at this time: 9
+# of 10 roots, last commit 2026-10-20 06:58 UTC. Root 864691134918597642 failed
+# structure_morphometry, so it has no predictions.
+UNITARY_TRIAL_AS_OF = datetime(2026, 10, 20, 7, 0, tzinfo=timezone.utc)
 
 # S0: the public CAVE export of `synapses_pni_2` at v1822, the rows that the
 # deployment mapped to the meshes. Positions are in voxels.

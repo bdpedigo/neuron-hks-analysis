@@ -12,6 +12,7 @@ map forward by nucleus ID, and the spines map forward through their synapse IDs.
 """
 
 import json
+from datetime import datetime
 
 import pandas as pd
 import polars as pl
@@ -21,7 +22,8 @@ from nglui.parser import StateParser
 from ..io import TABLE_PATH, VERSION
 from .catalog import Tables, write_parquet_atomic
 from .labels import fetch_nucleus_roots
-from .sources import DATASTACK
+from .sources import COLUMN_JOB_AS_OF, DATASTACK, STEP_PINS
+from .structures import read_structures, structure_pre_roots, synapse_structure_join
 
 UNITARY_TABLE_PATH = TABLE_PATH / "unitary_spines"
 LABEL_VERSION = 1412
@@ -107,4 +109,162 @@ Tables.register(
     "unitary_label_synapses",
     materialize=lambda path: write_parquet_atomic(build_unitary_label_synapses(), path),
     cache_params={"label_version": LABEL_VERSION},
+)
+
+
+# How a label's spine carries over to the new structures:
+# - kept: its mapped synapses are on one structure, which holds no other label.
+# - split: its mapped synapses are on more than one structure.
+# - merged: its mapped synapses are on one structure, which another label shares.
+# - lost: none of its synapses is on a structure.
+# - root_not_done: the deployment has no structures for its cell yet.
+OUTCOMES = ["kept", "split", "merged", "lost", "root_not_done"]
+STRUCTURE_PINS = {
+    f"{product}_{field}": value
+    for product in ("synapse_mapping", "vertex_structures", "structure_morphometry", "structure_features")
+    for field, value in zip(("version", "params"), STEP_PINS[product])
+}
+UNITARY_CLASSES = ("not_unitary", "unitary")
+
+
+def build_unitary_label_outcomes(as_of: datetime) -> pl.DataFrame:
+    """One row per labeled spine: its outcome, its counts, and the structure it
+    maps to when it is kept or merged."""
+    label_key = ["label_root_id", "component_id"]
+    cells = Tables["unitary_label_cells"].collect().select("label_root_id", "root_id")
+    synapses = (
+        Tables["unitary_label_synapses"].collect().join(cells, on="label_root_id")
+    )
+    done_roots = (
+        read_structures(cells["root_id"].to_list(), as_of=as_of)["root_id"].unique()
+    )
+    mapped = synapse_structure_join(synapses, as_of=as_of)
+    per_label = (
+        mapped.group_by(label_key)
+        .agg(
+            pl.col("root_id").first(),
+            pl.len().alias("n_synapses"),
+            pl.col("structure_id").is_not_null().sum().alias("n_on_structure"),
+            pl.col("structure_id").drop_nulls().n_unique().alias("n_structures"),
+            pl.col("structure_id").drop_nulls().first().alias("structure_id"),
+        )
+    )
+    n_labels_on_structure = (
+        mapped.drop_nulls("structure_id")
+        .group_by("root_id", "structure_id")
+        .agg(pl.struct(label_key).n_unique().alias("n_labels_on_structure"))
+    )
+    outcomes = (
+        read_unitary_annotations()
+        .join(per_label, on=label_key, how="left")
+        .join(cells, on="label_root_id", how="left", suffix="_cell")
+        .with_columns(
+            pl.col("root_id").fill_null(pl.col("root_id_cell")),
+            pl.col("n_synapses", "n_on_structure", "n_structures").fill_null(0),
+        )
+        .drop("root_id_cell")
+        .join(n_labels_on_structure, on=["root_id", "structure_id"], how="left")
+        .with_columns(
+            outcome=pl.when(~pl.col("root_id").is_in(done_roots.implode()))
+            .then(pl.lit("root_not_done"))
+            .when(pl.col("n_structures") == 0)
+            .then(pl.lit("lost"))
+            .when(pl.col("n_structures") > 1)
+            .then(pl.lit("split"))
+            .when(pl.col("n_labels_on_structure") > 1)
+            .then(pl.lit("merged"))
+            .otherwise(pl.lit("kept"))
+            .cast(pl.Enum(OUTCOMES))
+        )
+        .with_columns(
+            # A split or lost label has no one structure.
+            pl.when(pl.col("outcome").is_in(["kept", "merged"]))
+            .then(pl.col("structure_id"))
+            .alias("structure_id")
+        )
+    )
+    assert len(outcomes) == len(read_unitary_annotations())
+    return outcomes.sort(label_key)
+
+
+Tables.register(
+    "unitary_label_outcomes",
+    materialize=lambda path: write_parquet_atomic(
+        build_unitary_label_outcomes(COLUMN_JOB_AS_OF), path
+    ),
+    cache_params={
+        "label_version": LABEL_VERSION,
+        "unitary_label_cells": Tables["unitary_label_cells"].cache_key,
+        "as_of": COLUMN_JOB_AS_OF.isoformat(),
+        **STRUCTURE_PINS,
+    },
+)
+
+
+def build_unitary_training_spines(as_of: datetime) -> pl.DataFrame:
+    """One row per new structure that carries a usable label, with its morphometry
+    and spectral means.
+
+    A kept label gives its structure that label. The labels of a merged structure
+    give it their label when every label on it is merged (none is also split) and
+    they agree. Only structures with at least two presynaptic roots are kept, as
+    the labeled spines were sampled from those.
+    """
+    outcomes = Tables["unitary_label_outcomes"].collect()
+    structure_key = ["root_id", "structure_id"]
+    on_structure = outcomes.filter(pl.col("structure_id").is_not_null())
+    # NOTE: a structure that a split label also reaches is left out, because
+    # that label's spine is only partly on it.
+    split_reached = (
+        Tables["unitary_label_synapses"]
+        .collect()
+        .join(
+            outcomes.filter(pl.col("outcome") == "split").select(
+                "label_root_id", "component_id", "root_id"
+            ),
+            on=["label_root_id", "component_id"],
+        )
+    )
+    split_structures = (
+        synapse_structure_join(split_reached, as_of=as_of)
+        .drop_nulls("structure_id")
+        .select(structure_key)
+        .unique()
+    )
+    labeled = (
+        on_structure.join(split_structures, on=structure_key, how="anti")
+        .group_by(structure_key)
+        .agg(
+            pl.len().alias("n_labels"),
+            pl.col("true_multi").all().alias("all_true_multi"),
+            pl.col("true_multi").any().alias("any_true_multi"),
+            pl.col("component_id").alias("component_ids"),
+            pl.col("label_root_id").first(),
+        )
+        .filter(pl.col("all_true_multi") == pl.col("any_true_multi"))
+        .with_columns(
+            pl.when(pl.col("all_true_multi"))
+            .then(pl.lit(UNITARY_CLASSES[1]))
+            .otherwise(pl.lit(UNITARY_CLASSES[0]))
+            .alias("label")
+        )
+        .drop("all_true_multi", "any_true_multi")
+    )
+    root_ids = labeled["root_id"].unique().to_list()
+    cells = Tables["unitary_label_cells"].collect().select("root_id", "cell_type")
+    return (
+        labeled.join(structure_pre_roots(root_ids, as_of=as_of), on=structure_key, how="left")
+        .filter(pl.col("n_pre_root_ids") >= 2)
+        .join(read_structures(root_ids, as_of=as_of), on=structure_key, how="inner")
+        .join(cells, on="root_id", how="left")
+        .sort(structure_key)
+    )
+
+
+Tables.register(
+    "unitary_training_spines",
+    materialize=lambda path: write_parquet_atomic(
+        build_unitary_training_spines(COLUMN_JOB_AS_OF), path
+    ),
+    cache_params={"unitary_label_outcomes": Tables["unitary_label_outcomes"].cache_key},
 )
