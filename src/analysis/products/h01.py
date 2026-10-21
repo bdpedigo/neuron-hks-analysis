@@ -83,6 +83,11 @@ def fetch_h01_candidate_roots() -> pl.DataFrame:
 
 Tables.register(
     "h01_candidate_roots",
+    description=(
+        "One row per H01 root that holds labels in the exported neuroglancer states, "
+        "with its cohort (`validation` or `retrain`), its state and its number of "
+        "points. The H01 deployment job ran these roots."
+    ),
     materialize=lambda path: write_parquet_atomic(fetch_h01_candidate_roots(), path),
     cache_params=lambda: {"datastack": H01_DATASTACK, "version": H01_VERSION},
     folder=H01_FOLDER,
@@ -151,6 +156,11 @@ def fetch_h01_labels(annotations: pl.DataFrame, root_ids: list[int]) -> pl.DataF
 
 Tables.register(
     "h01_labels",
+    description=(
+        "One row per H01 labeled synapse: a labeled point matched by position to a "
+        "synapse of the H01 input snapshot, with one label (spine, shaft or soma) and "
+        "its cohort."
+    ),
     materialize=lambda path: write_parquet_atomic(
         fetch_h01_labels(
             read_h01_annotations(),
@@ -167,6 +177,9 @@ Tables.register(
 
 Tables.register(
     "h01_cells",
+    description=(
+        "One row per labeled H01 root, with its cohort and its number of labels."
+    ),
     build=lambda: Tables["h01_labels"]
     .lazy()
     .group_by("root_id", "cohort")
@@ -203,6 +216,10 @@ def fetch_h01_root_nuclei() -> pl.DataFrame:
 
 Tables.register(
     "h01_root_nuclei",
+    description=(
+        "One row per nucleus on an H01 root, from the H01 input snapshot, in the "
+        "columns of `root_nuclei`."
+    ),
     materialize=lambda path: write_parquet_atomic(fetch_h01_root_nuclei(), path),
     cache_params=lambda: {"inputs": str(H01_INPUTS_PATH)},
     folder=H01_FOLDER,
@@ -210,6 +227,10 @@ Tables.register(
 
 Tables.register(
     "h01_labeled_synapse_features",
+    description=(
+        "`h01_labels` with the spectral features of the mesh domain of each synapse, "
+        "in the columns of `labeled_synapse_features`. Read at the `features` cutoff."
+    ),
     materialize=lambda path: write_parquet_atomic(
         synapse_domain_join(
             Tables["h01_labels"].collect(),
@@ -245,6 +266,10 @@ Tables.register(
 
 Tables.register(
     "h01_predictions",
+    description=(
+        "`h01_labels` with the deployment posteriors and `pred_label` of each "
+        "synapse. Read by the H01 validation figure."
+    ),
     materialize=lambda path: write_parquet_atomic(
         synapse_posteriors(
             Tables["h01_labels"].collect(), as_of=cutoff("predictions"), datastack=H01_DATASTACK

@@ -56,6 +56,11 @@ def build_cell_selection(version=VERSION) -> pl.DataFrame:
 
 Tables.register(
     "cell_selection",
+    description=(
+        "One row per root in the CAVE view `aibs_cell_info`, with the census flags "
+        "`is_proofread`, `is_column` and `is_thalamic`. A root is proofread if it is "
+        "a column or thalamic cell with a cleaned axon."
+    ),
     materialize=lambda path: write_parquet_atomic(build_cell_selection(), path),
     cache_params=lambda: {"version": VERSION},
 )

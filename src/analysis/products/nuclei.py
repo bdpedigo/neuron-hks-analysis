@@ -35,6 +35,12 @@ def fetch_root_nuclei(version=VERSION) -> pl.DataFrame:
 
 Tables.register(
     "root_nuclei",
+    description=(
+        "One row per nucleus on a root, from the CAVE view "
+        "`nucleus_detection_lookup_v1`, with the nucleus point in nm. A root can have "
+        "more than one nucleus, for example after a merge. Used for "
+        "`distance_to_nucleus`."
+    ),
     materialize=lambda path: write_parquet_atomic(
         fetch_root_nuclei(version=VERSION), path
     ),

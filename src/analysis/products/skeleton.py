@@ -185,6 +185,12 @@ def _proofread_roots() -> list[int]:
 
 Tables.register(
     "skeleton_synapse_features",
+    description=(
+        "One row per synapse and side (`pre` or `post`) on each proofread root, from "
+        "the skeleton files. It holds the compartment (axon, dendrite or soma), the "
+        "path distance to the nucleus, the distance to the farthest tip and the "
+        "straight distance to the nearest nucleus, all in nm."
+    ),
     materialize=lambda path: write_skeleton_features(_proofread_roots(), path),
     cache_params=lambda: {
         "version": VERSION,

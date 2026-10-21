@@ -68,6 +68,11 @@ def build_validation_predictions(client, validation_labels: pl.DataFrame) -> pl.
 
 Tables.register(
     "validation_predictions",
+    description=(
+        "`validation_labels` with the deployment posteriors and `pred_label` of each "
+        "synapse, and its NEURD label from the CAVE table `synapse_target_structure`. "
+        "Read by the validation and NEURD comparison figures."
+    ),
     materialize=lambda path: write_parquet_atomic(
         build_validation_predictions(
             CAVEclient(DATASTACK), Tables["validation_labels"].collect()

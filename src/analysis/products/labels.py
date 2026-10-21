@@ -42,6 +42,10 @@ def fetch_validation_cells(client, version=VERSION) -> pl.DataFrame:
 
 Tables.register(
     "validation_cells",
+    description=(
+        "One row per held-out validation cell: the nucleus ID from "
+        "`validation_ids_used.csv` and its root ID at the current version."
+    ),
     materialize=lambda path: write_parquet_atomic(
         fetch_validation_cells(CAVEclient(DATASTACK), version=VERSION), path
     ),
@@ -124,6 +128,11 @@ def fetch_validation_labels(
 
 Tables.register(
     "validation_labels",
+    description=(
+        "One row per hand-labeled validation synapse, from the exported `exc` and "
+        "`inh` label files, joined to the CAVE synapse table. `root_id` is the "
+        "labeled cell. `on_cell` is false when the synapse is no longer on that cell."
+    ),
     materialize=lambda path: write_parquet_atomic(
         fetch_validation_labels(
             CAVEclient(DATASTACK),
@@ -274,6 +283,11 @@ def fetch_label_table(version=VERSION, live=False) -> pl.DataFrame:
 
 Tables.register(
     "labels",
+    description=(
+        "One row per manual compartment label from the three CAVE label tables, with "
+        "a sample weight per table. `target_id` is the labeled synapse, or -1 for a "
+        "point label. The validation cells are excluded."
+    ),
     materialize=lambda path: write_parquet_atomic(
         fetch_label_table(version=VERSION, live=False), path
     ),

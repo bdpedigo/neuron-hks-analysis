@@ -152,6 +152,12 @@ def write_synapse_features(
 
 Tables.register(
     "labeled_synapse_features",
+    description=(
+        "One row per labeled synapse (from `synapse_labels`), with the spectral "
+        "features of the mesh domain that it maps to and the domain and mesh "
+        "component sizes. Read from the deployment tables at the `features` cutoff. "
+        "These are the training rows of the synapse models."
+    ),
     materialize=lambda path: write_synapse_features(
         Tables["synapse_labels"].collect(), path, as_of=cutoff("features")
     ),

@@ -80,6 +80,10 @@ def fetch_unitary_label_cells(client, version=VERSION) -> pl.DataFrame:
 
 Tables.register(
     "unitary_label_cells",
+    description=(
+        "One row per cell with single-spine labels: its v1412 root, its nucleus ID, "
+        "its cell type and its root ID at the current version."
+    ),
     materialize=lambda path: write_parquet_atomic(
         fetch_unitary_label_cells(CAVEclient(DATASTACK), version=VERSION), path
     ),
@@ -107,6 +111,10 @@ def build_unitary_label_synapses() -> pl.DataFrame:
 
 Tables.register(
     "unitary_label_synapses",
+    description=(
+        "One row per synapse on a labeled spine, from the synapse-to-spine map of the "
+        "old pipeline. The key is the v1412 root and the old `component_id`."
+    ),
     materialize=lambda path: write_parquet_atomic(build_unitary_label_synapses(), path),
     cache_params=lambda: {"label_version": LABEL_VERSION},
 )
@@ -190,6 +198,12 @@ def build_unitary_label_outcomes(as_of: datetime) -> pl.DataFrame:
 
 Tables.register(
     "unitary_label_outcomes",
+    description=(
+        "One row per labeled spine from the neuroglancer states, with its hand tags "
+        "and how it carries over to the new spine structures: `kept`, `split`, "
+        "`merged`, `lost` or `root_not_done`. A kept or merged spine has the "
+        "`structure_id` of its new structure."
+    ),
     materialize=lambda path: write_parquet_atomic(
         build_unitary_label_outcomes(cutoff("spines")), path
     ),
@@ -263,6 +277,12 @@ def build_unitary_training_spines(as_of: datetime) -> pl.DataFrame:
 
 Tables.register(
     "unitary_training_spines",
+    description=(
+        "One row per new spine structure with a usable single-spine label, with its "
+        "morphometry and spectral means. Only structures with at least two "
+        "presynaptic roots are kept. These are the training rows of the single-spine "
+        "model."
+    ),
     materialize=lambda path: write_parquet_atomic(
         build_unitary_training_spines(cutoff("spines")), path
     ),

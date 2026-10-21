@@ -6,6 +6,7 @@ from typing import Callable, Optional
 import polars as pl
 
 from ..io import TABLE_PATH, VERSION, param_hash
+from .sources import UnpinnedError
 
 
 class Table:
@@ -18,6 +19,9 @@ class Table:
     A table is defined either by `build`, a query plan, or by `materialize`, which
     writes the table as a parquet file at the path it is given. A materialized
     table needs `cache_params`.
+
+    A table with neither is a planned table: a name and a `description` only, so
+    the catalog can list it before it is built.
 
     A table with `cache_params` is always read from its cache, which is built on
     first access. The cache is at `data/tables/{folder}/{name}/{cache_key}.parquet`,
@@ -33,12 +37,16 @@ class Table:
         cache_params: Optional[Callable[[], dict]] = None,
         materialize: Optional[Callable[[Path], None]] = None,
         folder: Optional[str] = None,
+        description: Optional[str] = None,
     ):
-        if (build is None) == (materialize is None):
-            raise ValueError(f"{name!r}: pass exactly one of `build` or `materialize`")
+        if build is not None and materialize is not None:
+            raise ValueError(f"{name!r}: pass at most one of `build` or `materialize`")
+        if build is None and materialize is None and (cache_params is not None or not description):
+            raise ValueError(f"{name!r}: a planned table takes only a `description`")
         if materialize is not None and cache_params is None:
             raise ValueError(f"{name!r}: a materialized table needs `cache_params`")
         self.name = name
+        self.description = description
         self._build = build
         self._materialize = materialize
         self.cache_params = cache_params
@@ -46,10 +54,14 @@ class Table:
 
     @cached_property
     def _plan(self) -> pl.LazyFrame:
+        if self._build is None:
+            raise NotImplementedError(f"{self.name!r} is planned, so it has no data yet")
         return self._build()
 
     @property
     def kind(self) -> str:
+        if self._build is None and self._materialize is None:
+            return "planned"
         if self._materialize is not None:
             return "materialized"
         if self.cache_params is not None:
@@ -101,6 +113,17 @@ class Table:
     def schema(self) -> pl.Schema:
         return self.lazy().collect_schema()
 
+    def peek_schema(self) -> Optional[pl.Schema]:
+        """The schema of the current cache, or None if it does not exist. This never
+        builds anything."""
+        try:
+            path = self.cache_path
+        except UnpinnedError:
+            return None
+        if path is None or not path.exists():
+            return None
+        return pl.scan_parquet(path).collect_schema()
+
     def describe(self) -> str:
         path = self.cache_path
         return f"{self.name} (not cached)" if path is None else f"{self.name} (cached at {path})"
@@ -139,9 +162,15 @@ class TableRegistry:
         cache_params: Optional[Callable[[], dict]] = None,
         materialize: Optional[Callable[[Path], None]] = None,
         folder: Optional[str] = None,
+        description: Optional[str] = None,
     ) -> Table:
         table = Table(
-            name, build, cache_params=cache_params, materialize=materialize, folder=folder
+            name,
+            build,
+            cache_params=cache_params,
+            materialize=materialize,
+            folder=folder,
+            description=description,
         )
         self._tables[name] = table
         return table
@@ -158,5 +187,42 @@ class TableRegistry:
     def __contains__(self, name: str) -> bool:
         return name in self._tables
 
+
+def condense_schema(schema: pl.Schema) -> list[tuple[str, str, int]]:
+    """`(pattern, dtype, count)` for each group of columns that differ only in an
+    index or a final x/y/z, in first-seen order.
+
+    In each name, an all-digit token becomes `*`, so `hks_0` ... `hks_31` is one
+    group, `hks_*`. A final `x`, `y` or `z` token becomes a set of the ones that
+    are present, so `domain_x`, `domain_y`, `domain_z` is `domain_{x,y,z}`. A
+    group of one column keeps its name. The dtype is `mixed` when the columns of a
+    group differ.
+    """
+    groups: dict[tuple[str, ...], dict] = {}
+    for name, dtype in schema.items():
+        tokens = tuple("*" if token.isdigit() else token for token in name.split("_"))
+        axis = None
+        if len(tokens) > 1 and tokens[-1] in AXES:
+            tokens, axis = tokens[:-1] + ("{axis}",), tokens[-1]
+        group = groups.setdefault(
+            tokens, {"name": name, "dtypes": set(), "axes": set(), "count": 0}
+        )
+        group["dtypes"].add(str(dtype))
+        group["count"] += 1
+        if axis is not None:
+            group["axes"].add(axis)
+    condensed = []
+    for tokens, group in groups.items():
+        axes = [axis for axis in AXES if axis in group["axes"]]
+        axis = axes[0] if len(axes) == 1 else "{" + ",".join(axes) + "}"
+        pattern = "_".join(axis if token == "{axis}" else token for token in tokens)
+        if group["count"] == 1:
+            pattern = group["name"]
+        dtype = group["dtypes"].pop() if len(group["dtypes"]) == 1 else "mixed"
+        condensed.append((pattern, dtype, group["count"]))
+    return condensed
+
+
+AXES = ("x", "y", "z")
 
 Tables = TableRegistry()
