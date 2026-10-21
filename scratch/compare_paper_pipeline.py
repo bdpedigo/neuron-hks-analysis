@@ -1,3 +1,5 @@
+# NOTE: Historical record of the H01 paper/deployment comparison. It will probably
+# not run: it reads pins and cutoffs that no longer exist (see analysis.sources).
 # %%
 """Compare the paper's H01 run (`absolute-solo-yak`) with the deployment run, on
 the H01 retrain cohort only, so the validation cohort stays held out.

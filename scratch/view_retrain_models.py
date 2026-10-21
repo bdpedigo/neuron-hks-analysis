@@ -1,3 +1,5 @@
+# NOTE: Historical record of the H01 paper/deployment comparison. It will probably
+# not run: it reads pins and cutoffs that no longer exist (see analysis.sources).
 """View the predictions of every model variant, with and without the H01 retrain
 rows, on whole H01 retrain cells. See `analysis.model_viewer` for the controls.
 
@@ -5,7 +7,7 @@ The `retrain` models trained on the labeled synapses of these cells, so their
 predictions on those synapses are not held out. The H01 validation cohort is not
 in the pool, and `load_root_cell` refuses its roots.
 
-    uv run python scripts/h01/view_retrain_models.py [--start N] [--screenshot out.png]
+    uv run python scratch/view_retrain_models.py [--start N] [--screenshot out.png]
 """
 
 from analysis import Tables

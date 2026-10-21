@@ -220,7 +220,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
   - [ ] Panel outputs: Fig 6A-C, glued `h01_validation_exc_f1`.
   - [ ] The 4-panel `_with_calibration` composite (the paper layout) is not ported. Port it with the composites.
 - **Local models** (`src/analysis/models.py`): `load_ssa_model(name_or_path)` loads any MLflow sklearn folder, and `predict(model, features)` scores it by the rules of the deployment prediction step. `train.py` imports its configuration (`MODEL_SPECS`, `RF_PARAMS`, the nucleus mask) from this module.
-  - [x] `scripts/h01/retrain_models.py` scores the models in its `MODELS` list on the retrain cohort. Its parity check reproduces the deployment exactly for `ssa_model_full_v1` (0 label mismatches, posterior difference 0).
+  - [x] `scratch/retrain_models.py` scores the models in its `MODELS` list on the retrain cohort. Its parity check reproduces the deployment exactly for `ssa_model_full_v1` (0 label mismatches, posterior difference 0).
   - Retrain cohort, zero-shot (no H01 training data), 1,978 scored synapses:
 
     | Variant | Weighted F1 | Macro F1 |
@@ -257,7 +257,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
     | `ssa_model_binary` (2 classes) | 0.963 ± 0.012 | 0.971 ± 0.009 | 0.955 ± 0.014 | 0.964 ± 0.011 | 0.004 |
     | `ssa_model_hks_binary` (2 classes) | 0.956 ± 0.009 | 0.956 ± 0.012 | 0.947 ± 0.011 | 0.947 ± 0.014 | 0.55 |
 - [x] Retrained models for viewing. The last cell of `retrain_h01.py` fits each variant once on all MICrONS rows and all H01 retrain rows (`both_upweighted`, no held-out fold). It saves them as `data/models/{variant}_h01_v1`. A saved model is read instead of fit again. These models trained on the labels of the retrain cells, so their predictions on those labels are not held out. Kind: rebuildable (the fit is seeded). They are not published.
-- [x] Whole-root viewers: `analysis.model_viewer` is the app, and two scripts run it. `scripts/model/view_microns_models.py` runs it on MICrONS cells (`--pool validation`, the default, or `--pool labeled`). `scripts/h01/view_retrain_models.py` shows the 6 variants x {no retrain, retrain} on one H01 retrain cell at a time (see "Whole-root data" below).
+- [x] Whole-root viewers: `analysis.model_viewer` is the app, and two scripts run it. `scripts/model/view_microns_models.py` runs it on MICrONS cells (`--pool validation`, the default, or `--pool labeled`). `scratch/view_retrain_models.py` shows the 6 variants x {no retrain, retrain} on one H01 retrain cell at a time (see "Whole-root data" below).
 
 ### Whole-root data (viewers)
 

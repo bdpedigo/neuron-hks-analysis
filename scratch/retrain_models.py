@@ -1,3 +1,5 @@
+# NOTE: Historical record of the H01 paper/deployment comparison. It will probably
+# not run: it reads pins and cutoffs that no longer exist (see analysis.sources).
 # %%
 """Score saved models on the H01 retrain cohort, to compare models locally.
 

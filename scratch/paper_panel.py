@@ -1,3 +1,5 @@
+# NOTE: Historical record of the H01 paper/deployment comparison. It will probably
+# not run: it reads pins and cutoffs that no longer exist (see analysis.sources).
 # %%
 """Plan step 0c: the paper's H01 picture next to the deployment's, on fixed H01
 cells.

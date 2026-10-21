@@ -1,5 +1,5 @@
 """Interactive pyvista views: the shared conventions (`style`), the data contract
-(`scene`), widgets, and the viewer. See `scripts/h01/view_retrain_models.py`."""
+(`scene`), widgets, and the viewer. See `scratch/view_retrain_models.py`."""
 
 from .scene import Channel, Scene, add_prediction, cell_to_scene
 from .style import (

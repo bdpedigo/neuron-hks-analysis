@@ -15,7 +15,7 @@ of them. A worker process loads and scores the next cell while one shows (about 
 minute from the cloud). The last few cells stay in `data/root_cache/`.
 
 The scripts that run it name the datastack and the cell pools:
-`scripts/h01/view_retrain_models.py` and `scripts/model/view_microns_models.py`.
+`scratch/view_retrain_models.py` and `scripts/model/view_microns_models.py`.
 """
 
 import argparse
