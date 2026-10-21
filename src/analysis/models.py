@@ -15,12 +15,7 @@ import polars as pl
 from sklearn.ensemble import RandomForestClassifier
 
 from .io import MODEL_PATH
-from .products.sources import (
-    DOMAIN_FEATURES_PARAMS,
-    DOMAIN_FEATURES_VERSION,
-    STRUCTURE_FEATURES_PARAMS,
-    STRUCTURE_FEATURES_VERSION,
-)
+from .products.sources import step_pin
 
 FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
 
@@ -50,19 +45,14 @@ MODEL_VERSION = "v1"
 
 RF_PARAMS = dict(class_weight="balanced", max_depth=15, n_estimators=500)
 
-# The table each kind of model is trained on, as the deployment names it. A
-# model records it, and the deployment's bind compares it with the table a run
-# reads.
-DOMAIN_TRAINED_ON = {
-    "product": "domain_features",
-    "param_hash": DOMAIN_FEATURES_PARAMS,
-    "step_version": DOMAIN_FEATURES_VERSION,
-}
-STRUCTURE_TRAINED_ON = {
-    "product": "structure_features",
-    "param_hash": STRUCTURE_FEATURES_PARAMS,
-    "step_version": STRUCTURE_FEATURES_VERSION,
-}
+
+def trained_on(product: str) -> dict:
+    """The pinned table of `product` (for example `domain_features`), as the
+    deployment names it. A model records the table it is trained on, and the
+    deployment's bind compares it with the table a run reads."""
+    step_version, param_hash = step_pin(product)
+    return {"product": product, "param_hash": param_hash, "step_version": step_version}
+
 
 # The unitary-spine model (P13): is a putative multi-input spine one spine with a
 # single head? The geometry columns come from `structure_morphometry`, the spectral
@@ -125,7 +115,7 @@ def make_model(random_state) -> RandomForestClassifier:
 
 
 def save_model(
-    model, X, name, version=MODEL_VERSION, trained_on=DOMAIN_TRAINED_ON
+    model, X, name, version=MODEL_VERSION, features_product="domain_features"
 ) -> Path:
     # Saved in the MLflow model format, which records this environment and the
     # feature signature. meshmash-deployment publishes it from this directory with
@@ -144,7 +134,7 @@ def save_model(
         metadata={
             "classes": [str(label) for label in model.classes_],
             # The deployment table the training rows were joined from.
-            "trained_on": trained_on,
+            "trained_on": trained_on(features_product),
         },
         # skops refuses tree internals unless named; this model is our own.
         skops_trusted_types=["sklearn.tree._tree.Tree"],

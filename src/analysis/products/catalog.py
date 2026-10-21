@@ -12,6 +12,9 @@ class Table:
     """A named table whose query plan is built lazily on first access, with optional
     opt-in parquet caching (keyed by `cache_params`) independent of its ingredients.
 
+    `cache_params` is a function that returns the dict of the cache key, so the pins
+    it reads are looked up only when the key is needed, not at import.
+
     A table is defined either by `build`, a query plan, or by `materialize`, which
     writes the table as a parquet file at the path it is given. A materialized
     table needs `cache_params`.
@@ -20,13 +23,14 @@ class Table:
     first access. The cache is at `data/tables/{folder}/{name}/{cache_key}.parquet`,
     where `folder` defaults to `v{VERSION}`.
     To make a product's key change when an input changes, put the input's
-    `cache_key` in the product's `cache_params`."""
+    `cache_key` in the product's `cache_params`. A table whose pins do not exist
+    yet raises `UnpinnedError` from `cache_key`."""
 
     def __init__(
         self,
         name: str,
         build: Optional[Callable[[], pl.LazyFrame]] = None,
-        cache_params: Optional[dict] = None,
+        cache_params: Optional[Callable[[], dict]] = None,
         materialize: Optional[Callable[[Path], None]] = None,
         folder: Optional[str] = None,
     ):
@@ -56,7 +60,7 @@ class Table:
     def cache_key(self) -> Optional[str]:
         if self.cache_params is None:
             return None
-        return param_hash(**self.cache_params)
+        return param_hash(**self.cache_params())
 
     @property
     def cache_path(self) -> Optional[Path]:
@@ -132,7 +136,7 @@ class TableRegistry:
         self,
         name: str,
         build: Optional[Callable[[], pl.LazyFrame]] = None,
-        cache_params: Optional[dict] = None,
+        cache_params: Optional[Callable[[], dict]] = None,
         materialize: Optional[Callable[[Path], None]] = None,
         folder: Optional[str] = None,
     ) -> Table:

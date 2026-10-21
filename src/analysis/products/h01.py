@@ -24,21 +24,13 @@ from .catalog import Tables, write_parquet_atomic
 from .features import add_distance_to_nucleus, synapse_domain_join
 from .predictions import synapse_posteriors
 from .sources import (
-    DOMAIN_FEATURES_PARAMS,
-    DOMAIN_FEATURES_VERSION,
-    DOMAIN_PREDICTIONS_PARAMS,
-    DOMAIN_PREDICTIONS_VERSION,
-    H01_AS_OF,
     H01_DATASTACK,
     H01_INPUTS_PATH,
     H01_NUCLEI_PATH,
     H01_SYNAPSES_PATH,
     H01_VERSION,
-    SYNAPSE_MAPPING_PARAMS,
-    SYNAPSE_MAPPING_VERSION,
-    VERTEX_DOMAINS_PARAMS,
-    VERTEX_DOMAINS_VERSION,
-    deployment_path,
+    cutoff,
+    pin_params,
 )
 
 H01_TABLE_PATH = TABLE_PATH / "h01"
@@ -92,7 +84,7 @@ def fetch_h01_candidate_roots() -> pl.DataFrame:
 Tables.register(
     "h01_candidate_roots",
     materialize=lambda path: write_parquet_atomic(fetch_h01_candidate_roots(), path),
-    cache_params={"datastack": H01_DATASTACK, "version": H01_VERSION},
+    cache_params=lambda: {"datastack": H01_DATASTACK, "version": H01_VERSION},
     folder=H01_FOLDER,
 )
 
@@ -166,7 +158,7 @@ Tables.register(
         ),
         path,
     ),
-    cache_params={
+    cache_params=lambda: {
         "inputs": str(H01_INPUTS_PATH),
         "h01_candidate_roots": Tables["h01_candidate_roots"].cache_key,
     },
@@ -180,7 +172,7 @@ Tables.register(
     .group_by("root_id", "cohort")
     .agg(n_labels=pl.len())
     .sort("root_id"),
-    cache_params={"h01_labels": Tables["h01_labels"].cache_key},
+    cache_params=lambda: {"h01_labels": Tables["h01_labels"].cache_key},
     folder=H01_FOLDER,
 )
 
@@ -212,34 +204,26 @@ def fetch_h01_root_nuclei() -> pl.DataFrame:
 Tables.register(
     "h01_root_nuclei",
     materialize=lambda path: write_parquet_atomic(fetch_h01_root_nuclei(), path),
-    cache_params={"inputs": str(H01_INPUTS_PATH)},
+    cache_params=lambda: {"inputs": str(H01_INPUTS_PATH)},
     folder=H01_FOLDER,
 )
-
-_SPECTRAL_PINS = {
-    "as_of": H01_AS_OF.isoformat(),
-    "synapse_mapping_version": SYNAPSE_MAPPING_VERSION,
-    "synapse_mapping_params": SYNAPSE_MAPPING_PARAMS,
-    "vertex_domains_version": VERTEX_DOMAINS_VERSION,
-    "vertex_domains_params": VERTEX_DOMAINS_PARAMS,
-}
 
 Tables.register(
     "h01_labeled_synapse_features",
     materialize=lambda path: write_parquet_atomic(
         synapse_domain_join(
             Tables["h01_labels"].collect(),
-            deployment_path("domain_features", H01_DATASTACK),
-            as_of=H01_AS_OF,
+            "domain_features",
+            as_of=cutoff("features"),
             datastack=H01_DATASTACK,
         ),
         path,
     ),
-    cache_params={
+    cache_params=lambda: {
         "h01_labels": Tables["h01_labels"].cache_key,
-        **_SPECTRAL_PINS,
-        "domain_features_version": DOMAIN_FEATURES_VERSION,
-        "domain_features_params": DOMAIN_FEATURES_PARAMS,
+        **pin_params(
+            "synapse_mapping", "vertex_domains", "domain_features", as_of=cutoff("features")
+        ),
     },
     folder=H01_FOLDER,
 )
@@ -263,15 +247,18 @@ Tables.register(
     "h01_predictions",
     materialize=lambda path: write_parquet_atomic(
         synapse_posteriors(
-            Tables["h01_labels"].collect(), as_of=H01_AS_OF, datastack=H01_DATASTACK
+            Tables["h01_labels"].collect(), as_of=cutoff("predictions"), datastack=H01_DATASTACK
         ),
         path,
     ),
-    cache_params={
+    cache_params=lambda: {
         "h01_labels": Tables["h01_labels"].cache_key,
-        **_SPECTRAL_PINS,
-        "domain_predictions_version": DOMAIN_PREDICTIONS_VERSION,
-        "domain_predictions_params": DOMAIN_PREDICTIONS_PARAMS,
+        **pin_params(
+            "synapse_mapping",
+            "vertex_domains",
+            "domain_predictions",
+            as_of=cutoff("predictions"),
+        ),
     },
     folder=H01_FOLDER,
 )

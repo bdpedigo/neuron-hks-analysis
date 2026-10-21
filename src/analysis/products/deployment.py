@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from functools import lru_cache
-from typing import Optional
 
 import polars as pl
 from deltalake import DeltaTable
@@ -14,16 +13,6 @@ from .partitions import bucket_count, hash_partition
 def attempt_cutoff(as_of: datetime) -> int:
     # attempt_id is milliseconds since the Unix epoch.
     return int(as_of.timestamp() * 1000)
-
-
-def latest_attempt(lf: pl.LazyFrame, *, as_of: Optional[datetime]) -> pl.LazyFrame:
-    # An attempt replaces all of a root's rows at once (dedupe_key="root_id"),
-    # so the newest attempt_id for a root wins, whole-root. The as_of cutoff
-    # comes first, because it decides which attempts can win. A caller must
-    # pass `as_of=None` explicitly to read the latest attempts.
-    if as_of is not None:
-        lf = lf.filter(pl.col("attempt_id") <= attempt_cutoff(as_of))
-    return lf.filter(pl.col("attempt_id") == pl.col("attempt_id").max().over("root_id"))
 
 
 @lru_cache

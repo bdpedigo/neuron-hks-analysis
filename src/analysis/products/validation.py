@@ -7,16 +7,7 @@ from ..io import VERSION
 from . import labels  # noqa: F401 -- registers "validation_labels", whose cache key P4 reads
 from .catalog import Tables, write_parquet_atomic
 from .predictions import synapse_posteriors
-from .sources import (
-    DATASTACK,
-    DOMAIN_PREDICTIONS_PARAMS,
-    DOMAIN_PREDICTIONS_VERSION,
-    SYNAPSE_MAPPING_PARAMS,
-    SYNAPSE_MAPPING_VERSION,
-    VALIDATION_AS_OF,
-    VERTEX_DOMAINS_PARAMS,
-    VERTEX_DOMAINS_VERSION,
-)
+from .sources import DATASTACK, cutoff, pin_params
 
 # The `value` codes of the NEURD table `synapse_target_structure`.
 NEURD_DETAILED_LABELS = {
@@ -70,7 +61,7 @@ def build_validation_predictions(client, validation_labels: pl.DataFrame) -> pl.
     The posteriors are joined on `root_id` (the cell), so a synapse that is not on
     its cell (`on_cell` false) has null posteriors.
     """
-    predictions = synapse_posteriors(validation_labels, as_of=VALIDATION_AS_OF)
+    predictions = synapse_posteriors(validation_labels, as_of=cutoff("predictions"))
     neurd = fetch_neurd_labels(client, validation_labels["synapse_id"].to_list())
     return predictions.join(neurd, on="synapse_id", how="left")
 
@@ -83,15 +74,14 @@ Tables.register(
         ),
         path,
     ),
-    cache_params={
+    cache_params=lambda: {
         "version": VERSION,
         "validation_labels": Tables["validation_labels"].cache_key,
-        "as_of": VALIDATION_AS_OF.isoformat(),
-        "synapse_mapping_version": SYNAPSE_MAPPING_VERSION,
-        "synapse_mapping_params": SYNAPSE_MAPPING_PARAMS,
-        "vertex_domains_version": VERTEX_DOMAINS_VERSION,
-        "vertex_domains_params": VERTEX_DOMAINS_PARAMS,
-        "domain_predictions_version": DOMAIN_PREDICTIONS_VERSION,
-        "domain_predictions_params": DOMAIN_PREDICTIONS_PARAMS,
+        **pin_params(
+            "synapse_mapping",
+            "vertex_domains",
+            "domain_predictions",
+            as_of=cutoff("predictions"),
+        ),
     },
 )

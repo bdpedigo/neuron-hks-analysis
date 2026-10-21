@@ -19,7 +19,6 @@ from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold, cross
 
 from analysis import Tables
 from analysis.models import (
-    STRUCTURE_TRAINED_ON,
     UNITARY_MODEL_SPECS,
     UNITARY_RF_PARAMS,
     feature_columns,
@@ -94,7 +93,7 @@ for name, spec in UNITARY_MODEL_SPECS.items():
     currtime = time.time()
     model = make_unitary_model(0).fit(X, y)
     model_dir = save_model(
-        model, X, f"{name}", version=VERSION, trained_on=STRUCTURE_TRAINED_ON
+        model, X, f"{name}", version=VERSION, features_product="structure_features"
     )
     print(f"{name}: {time.time() - currtime:.1f} s, saved to {model_dir}")
     importances[name] = pd.Series(model.feature_importances_, index=X.columns)

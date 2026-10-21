@@ -38,5 +38,5 @@ Tables.register(
     materialize=lambda path: write_parquet_atomic(
         fetch_root_nuclei(version=VERSION), path
     ),
-    cache_params={"version": VERSION},
+    cache_params=lambda: {"version": VERSION},
 )

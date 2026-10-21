@@ -45,7 +45,7 @@ Tables.register(
     materialize=lambda path: write_parquet_atomic(
         fetch_validation_cells(CAVEclient(DATASTACK), version=VERSION), path
     ),
-    cache_params={"version": VERSION},
+    cache_params=lambda: {"version": VERSION},
 )
 
 
@@ -132,7 +132,7 @@ Tables.register(
         ),
         path,
     ),
-    cache_params={
+    cache_params=lambda: {
         "version": VERSION,
         "validation_cells": Tables["validation_cells"].cache_key,
     },
@@ -277,7 +277,7 @@ Tables.register(
     materialize=lambda path: write_parquet_atomic(
         fetch_label_table(version=VERSION, live=False), path
     ),
-    cache_params={"version": VERSION},
+    cache_params=lambda: {"version": VERSION},
 )
 Tables.register(
     "synapse_labels",

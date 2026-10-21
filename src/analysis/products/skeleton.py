@@ -186,7 +186,7 @@ def _proofread_roots() -> list[int]:
 Tables.register(
     "skeleton_synapse_features",
     materialize=lambda path: write_skeleton_features(_proofread_roots(), path),
-    cache_params={
+    cache_params=lambda: {
         "version": VERSION,
         "cell_selection": Tables["cell_selection"].cache_key,
         "root_nuclei": Tables["root_nuclei"].cache_key,

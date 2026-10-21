@@ -22,7 +22,7 @@ from nglui.parser import StateParser
 from ..io import TABLE_PATH, VERSION
 from .catalog import Tables, write_parquet_atomic
 from .labels import fetch_nucleus_roots
-from .sources import COLUMN_JOB_AS_OF, DATASTACK, STEP_PINS
+from .sources import DATASTACK, cutoff, pin_params
 from .structures import read_structures, structure_pre_roots, synapse_structure_join
 
 UNITARY_TABLE_PATH = TABLE_PATH / "unitary_spines"
@@ -83,7 +83,7 @@ Tables.register(
     materialize=lambda path: write_parquet_atomic(
         fetch_unitary_label_cells(CAVEclient(DATASTACK), version=VERSION), path
     ),
-    cache_params={"version": VERSION, "label_version": LABEL_VERSION},
+    cache_params=lambda: {"version": VERSION, "label_version": LABEL_VERSION},
 )
 
 
@@ -108,7 +108,7 @@ def build_unitary_label_synapses() -> pl.DataFrame:
 Tables.register(
     "unitary_label_synapses",
     materialize=lambda path: write_parquet_atomic(build_unitary_label_synapses(), path),
-    cache_params={"label_version": LABEL_VERSION},
+    cache_params=lambda: {"label_version": LABEL_VERSION},
 )
 
 
@@ -119,11 +119,12 @@ Tables.register(
 # - lost: none of its synapses is on a structure.
 # - root_not_done: the deployment has no structures for its cell yet.
 OUTCOMES = ["kept", "split", "merged", "lost", "root_not_done"]
-STRUCTURE_PINS = {
-    f"{product}_{field}": value
-    for product in ("synapse_mapping", "vertex_structures", "structure_morphometry", "structure_features")
-    for field, value in zip(("version", "params"), STEP_PINS[product])
-}
+STRUCTURE_PRODUCTS = (
+    "synapse_mapping",
+    "vertex_structures",
+    "structure_morphometry",
+    "structure_features",
+)
 UNITARY_CLASSES = ("not_unitary", "unitary")
 
 
@@ -190,13 +191,12 @@ def build_unitary_label_outcomes(as_of: datetime) -> pl.DataFrame:
 Tables.register(
     "unitary_label_outcomes",
     materialize=lambda path: write_parquet_atomic(
-        build_unitary_label_outcomes(COLUMN_JOB_AS_OF), path
+        build_unitary_label_outcomes(cutoff("spines")), path
     ),
-    cache_params={
+    cache_params=lambda: {
         "label_version": LABEL_VERSION,
         "unitary_label_cells": Tables["unitary_label_cells"].cache_key,
-        "as_of": COLUMN_JOB_AS_OF.isoformat(),
-        **STRUCTURE_PINS,
+        **pin_params(*STRUCTURE_PRODUCTS, as_of=cutoff("spines")),
     },
 )
 
@@ -264,7 +264,7 @@ def build_unitary_training_spines(as_of: datetime) -> pl.DataFrame:
 Tables.register(
     "unitary_training_spines",
     materialize=lambda path: write_parquet_atomic(
-        build_unitary_training_spines(COLUMN_JOB_AS_OF), path
+        build_unitary_training_spines(cutoff("spines")), path
     ),
-    cache_params={"unitary_label_outcomes": Tables["unitary_label_outcomes"].cache_key},
+    cache_params=lambda: {"unitary_label_outcomes": Tables["unitary_label_outcomes"].cache_key},
 )

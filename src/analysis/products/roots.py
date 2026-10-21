@@ -36,17 +36,16 @@ from .deployment import delta_table, latest_attempts, scan_roots
 from .features import add_distance_to_nucleus
 from .sources import (
     DATASTACK,
-    H01_AS_OF,
     H01_DATASTACK,
     H01_SYNAPSES_PATH,
-    MICRONS_AS_OF,
     MICRONS_SYNAPSE_RESOLUTION,
     MICRONS_SYNAPSES_PATH,
-    STEP_PINS,
+    cutoff,
     deployment_path,
+    pin_params,
 )
 
-# The pins and local tables of each datastack.
+# The sources and local tables of each datastack.
 # - `synapse_resolution`: nm per unit of the synapse positions in `synapses_path`.
 # - `label_tables`: the local tables with manual labels, each with its label
 #   column. A table's `root_id` is the cell the label belongs to.
@@ -54,7 +53,6 @@ from .sources import (
 #   at, or None.
 ROOT_SOURCES = {
     H01_DATASTACK: dict(
-        as_of=H01_AS_OF,
         synapses_path=H01_SYNAPSES_PATH,
         # NOTE: the snapshot stores positions in nm.
         synapse_resolution=(1.0, 1.0, 1.0),
@@ -64,7 +62,6 @@ ROOT_SOURCES = {
         held_out_cohort="validation",
     ),
     DATASTACK: dict(
-        as_of=MICRONS_AS_OF,
         synapses_path=MICRONS_SYNAPSES_PATH,
         synapse_resolution=MICRONS_SYNAPSE_RESOLUTION,
         nuclei_table="root_nuclei",
@@ -75,6 +72,8 @@ ROOT_SOURCES = {
 }
 LABELS = ("spine", "shaft", "soma")
 ROOT_PRODUCTS = ("vertex_domains", "domain_features", "domain_predictions", "synapse_mapping")
+# The newest of `ROOT_PRODUCTS` is `domain_predictions`, so a root reads at its cutoff.
+ROOT_CUTOFF = "predictions"
 
 # The `domains` row for a vertex in no domain. Above any real domain id.
 NO_DOMAIN = np.iinfo(np.int32).max
@@ -121,8 +120,7 @@ def root_pins(datastack: str) -> dict:
     source = ROOT_SOURCES[datastack]
     return {
         "datastack": datastack,
-        "as_of": source["as_of"].isoformat(),
-        **{product: "/".join(STEP_PINS[product]) for product in ROOT_PRODUCTS},
+        **pin_params(*ROOT_PRODUCTS, as_of=cutoff(ROOT_CUTOFF)),
         "mesh_get_kwargs": mesh_get_kwargs(datastack),
         "nuclei": _cache_key(source["nuclei_table"]),
         "labels": {table: _cache_key(table) for table in source["label_tables"]},
@@ -157,8 +155,8 @@ def fetch_mesh(root_id: int, datastack: str, n_tries: int = 3) -> tuple[np.ndarr
 
 
 def fetch_root_tables(root_id: int, datastack: str) -> dict[str, pl.DataFrame]:
-    """The rows of `root_id` in each of `ROOT_PRODUCTS`, at the pinned `as_of`."""
-    as_of = ROOT_SOURCES[datastack]["as_of"]
+    """The rows of `root_id` in each of `ROOT_PRODUCTS`, at `ROOT_CUTOFF`."""
+    as_of = cutoff(ROOT_CUTOFF)
     scans = latest_attempts(
         [
             scan_roots(deployment_path(product, datastack), [root_id], as_of=as_of)

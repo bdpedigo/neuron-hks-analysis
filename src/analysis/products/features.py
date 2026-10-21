@@ -7,53 +7,13 @@ from pathlib import Path
 
 import polars as pl
 from tqdm.auto import tqdm
-from upath import UPath
 
 from . import labels  # noqa: F401 -- registers "labels", whose cache key P2 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", which the training view reads
 from .catalog import Tables
-from .deployment import latest_attempt, latest_attempts, scan_roots
+from .deployment import latest_attempts, scan_roots
 from .partitions import hash_partition
-from .sources import (
-    DATASTACK,
-    DOMAIN_FEATURES_PARAMS,
-    DOMAIN_FEATURES_PATH,
-    DOMAIN_FEATURES_VERSION,
-    LABELED_AS_OF,
-    SYNAPSE_MAPPING_PARAMS,
-    SYNAPSE_MAPPING_PATH,
-    SYNAPSE_MAPPING_VERSION,
-    VERTEX_DOMAINS_PARAMS,
-    VERTEX_DOMAINS_PATH,
-    VERTEX_DOMAINS_VERSION,
-    deployment_path,
-)
-
-# NOTE: these views read the latest attempts, so they change as the deployment
-# writes. They are for exploration only. Products pin a cutoff.
-Tables.register(
-    "synapse_mapping",
-    lambda: latest_attempt(pl.scan_delta(SYNAPSE_MAPPING_PATH), as_of=None).select(
-        "root_id", "synapse_id", "mesh_index"
-    ),
-)
-Tables.register(
-    "vertex_domains",
-    lambda: latest_attempt(pl.scan_delta(VERTEX_DOMAINS_PATH), as_of=None).select(
-        "root_id", "mesh_index", "domain_id"
-    ),
-)
-Tables.register(
-    "synapse_to_domain",
-    lambda: Tables["synapse_mapping"]
-    .lazy()
-    .join(Tables["vertex_domains"].lazy(), on=["root_id", "mesh_index"], how="left")
-    .drop("mesh_index"),
-)
-Tables.register(
-    "domain_features",
-    lambda: latest_attempt(pl.scan_delta(DOMAIN_FEATURES_PATH), as_of=None),
-)
+from .sources import DATASTACK, cutoff, deployment_path, pin_params
 
 
 def synapse_vertex_join(
@@ -101,13 +61,13 @@ def synapse_vertex_join(
 
 def synapse_domain_join(
     synapses: pl.DataFrame,
-    domain_table: UPath,
+    domain_product: str,
     *,
     as_of: datetime,
     datastack: str = DATASTACK,
 ) -> pl.DataFrame:
     """`synapses` (with `root_id` and `synapse_id`) left-joined to the row of
-    `domain_table` (a per-domain deployment table) for the domain of each synapse,
+    `domain_product` (a per-domain deployment table) for the domain of each synapse,
     as the deployment tables were at `as_of`.
 
     The domain columns are null for a synapse whose root the deployment has not
@@ -117,7 +77,9 @@ def synapse_domain_join(
     synapse_domains = synapse_vertex_join(
         synapses, "vertex_domains", "domain_id", as_of=as_of, datastack=datastack
     )
-    (domain_rows_lf,) = latest_attempts([scan_roots(domain_table, root_ids, as_of=as_of)])
+    (domain_rows_lf,) = latest_attempts(
+        [scan_roots(deployment_path(domain_product, datastack), root_ids, as_of=as_of)]
+    )
     domain_rows = (
         domain_rows_lf.join(
             synapse_domains.lazy().select("root_id", "domain_id").drop_nulls().unique(),
@@ -135,7 +97,7 @@ def synapse_domain_join(
 
 def synapse_features(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame:
     """`synapses` left-joined to its domain features (see `synapse_domain_join`)."""
-    return synapse_domain_join(synapses, DOMAIN_FEATURES_PATH, as_of=as_of)
+    return synapse_domain_join(synapses, "domain_features", as_of=as_of)
 
 
 def _write_part(synapses: pl.DataFrame, part: Path, as_of: datetime) -> None:
@@ -191,17 +153,13 @@ def write_synapse_features(
 Tables.register(
     "labeled_synapse_features",
     materialize=lambda path: write_synapse_features(
-        Tables["synapse_labels"].collect(), path, as_of=LABELED_AS_OF
+        Tables["synapse_labels"].collect(), path, as_of=cutoff("features")
     ),
-    cache_params={
+    cache_params=lambda: {
         "labels": Tables["labels"].cache_key,
-        "as_of": LABELED_AS_OF.isoformat(),
-        "synapse_mapping_version": SYNAPSE_MAPPING_VERSION,
-        "synapse_mapping_params": SYNAPSE_MAPPING_PARAMS,
-        "vertex_domains_version": VERTEX_DOMAINS_VERSION,
-        "vertex_domains_params": VERTEX_DOMAINS_PARAMS,
-        "domain_features_version": DOMAIN_FEATURES_VERSION,
-        "domain_features_params": DOMAIN_FEATURES_PARAMS,
+        **pin_params(
+            "synapse_mapping", "vertex_domains", "domain_features", as_of=cutoff("features")
+        ),
     },
 )
 

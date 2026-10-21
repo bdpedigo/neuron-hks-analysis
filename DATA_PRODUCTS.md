@@ -43,7 +43,11 @@ Scope labels used below:
   - `as_of` is a cutoff on `attempt_id`.
   - The deployment sets `delta.logRetentionDuration` to 24 hours and `delta.deletedFileRetentionDuration` to 6 hours. It runs OPTIMIZE and VACUUM on a schedule. So a Delta version number stops working after about a day.
   - The tables are append-only, and the latest attempt per root wins at read time. OPTIMIZE rewrites files but keeps every row. So `attempt_id <= as_of`, applied before the latest-attempt filter, gives the same rows at any later time.
-  - [x] Put each table's `as_of` in the configuration file and in the cache key. Then a cache rebuilds only after a deliberate change to `as_of`. Done for P2: `LABELED_AS_OF` in `products/sources.py` is in the P2 cache key.
+  - [x] Put each `as_of` in the configuration file and in the cache key. Then a cache rebuilds only after a deliberate change to `as_of`.
+    - `STEP_PINS` in `products/sources.py` holds the path of each deployment table (step version and `p-…` hash). Every datastack shares it.
+    - `CUTOFFS` in `products/sources.py` holds the named cutoffs. A product reads all of its tables at the cutoff of its newest input. `pin_params` puts the cutoff and the paths in the cache key.
+    - One table can have more than one cutoff. P2 keeps the `features` cutoff when the full run appends rows, so P2 and the models trained on it keep their keys.
+    - A product whose table or cutoff is not in the configuration yet is `unpinned` in `just status`, and a read of it raises `UnpinnedError`.
   - Set `as_of` after a job finishes. An attempt that starts before `as_of` and commits after it appears only in later reads.
   - Two events break the pin: a deletion of old attempts, or a move of the table to a new `p-…` path. A new path means new parameters, so that is a deliberate change.
   - A product built from deployment tables without an `as_of` is frozen, not rebuildable. For example, the full run can process the 6,010 labeled roots again. Their new attempts then win, and an unpinned P2 changes.
@@ -61,13 +65,13 @@ Scope labels used below:
 |---|---|---|---|---|---|---|
 | S0 | CAVE `synapses_pni_2`, as the Delta export at `gs://mat_dbs/public/deltalake_exports/minnie65_phase3_v1/v1822/synapses_pni_2/post_pt_root_id` | v1822 (in the path) | none (selection rows go to P9) | cloud | all | exists |
 | S1 | CAVE `minnie65_public`: view `aibs_cell_info`, table `proofreading_status_and_strategy` | v1822 | `data/tables/v1822/{aibs_cell_info,proofreading_status_and_strategy}.parquet` | rebuildable | all cells | cached |
-| S2 | Deployment tables `synapse_mapping`, `vertex_domains`, `domain_features` at `gs://bdp-ssa/meshmash-deployment/minnie65_phase3_v1/…` | step version + `p-…` hash (in the path) + `as_of` | none (labeled rows go to P2) | cloud | labeled roots now (job `microns_top_labeled`, 6,010 roots), then **all** after the full run | partial |
+| S2 | Deployment tables `synapse_mapping`, `vertex_domains`, `domain_features` at `gs://bdp-ssa/meshmash-deployment/minnie65_phase3_v1/…` | step version + `p-…` hash (in the path) + `as_of`. V2: `synapse_mapping` s2, the spectral tables s4, cutoff `features` | none (labeled rows go to P2) | cloud | the test cohort now (job `test_cohort`, 6,378 of 6,379 roots), then **all** after the full run | partial |
 | S3 | Deployment tables `domain_predictions` (full `posterior_<class>`) + `synapse_predictions` (argmax summary only) | as S2, and the `p-…` hash includes the P3 model URI | none | cloud | validation roots now (job `microns_validation`, 132 roots), then **all** after the full run | partial. The model is P3 `gs://bdp-ssa/meshmash-deployment/models/ssa_model_full_v1` |
 | S4 | Deployment tables `structure_morphometry` + `vertex_structures` (spines) | as S2 | none | cloud | all | not run (50-root `spine_trial` only) |
 | S5 | Skeletons at `gs://csm-skel/osy/minnie65/skel/{root}.osy` | root ID. Make sure that files are not overwritten in place. | none (fields go to P8) | cloud | proofread + column cells | exists |
 | S6 | CAVE annotation tables `vortex_compartment_targets`, `bdp_synapse_compartment_labels`, `bdp_point_compartment_labels` | v1822 timestamp, for both annotations and segmentation (`live=False`, the default, in `products/labels.py`) | P1 | rebuildable | labeled | exists |
 | S7 | CAVE `synapse_target_structure` (NEURD) | v1822 | P4 | rebuildable | validation | exists |
-| S8 | Benchmark outputs at `gs://bdp-ssa/comparisons/{shiny-wolf-message,…-strawman}` | run name (in the path) | none | cloud | benchmark neurons | exists, re-run likely |
+| S8 | Strawman comparison outputs at `gs://bdp-ssa/comparisons/{shiny-wolf-message,…-strawman}` | run name (in the path) | none | cloud | strawman neurons | exists, re-run likely |
 
 ### Manual label sources
 
@@ -79,7 +83,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 | S10 | Checked multi-input spines from 10 neuroglancer states (`get_multi_annotations`) | none (one-time export) | `data/tables/v1412/multi_spine_annotations.parquet` | column | cached, keyed by v1412 IDs |
 | S11 | Single-spine labels from 7 neuroglancer states + `cell_type_selection_for_multis.csv` (`meshrep/sandbox/sample_cells_for_multi_validation.py`) | none (one-time export) | not exported yet | labeled spines | todo |
 | S12 | H01 labels from 16 neuroglancer states (`scripts/h01/export_h01_states.py`): 8 `validation` states (Fig 6) and 8 `retrain` states | H01 v1054 timestamp | `data/tables/h01/states/{state_id}.json`, `data/tables/h01/states.csv` | H01 labeled | cached |
-| S13 | Deployment tables for H01 (`synapse_mapping`, `vertex_domains`, `domain_features`, `domain_predictions`) on the `h01_c3_flat` datastack, job `h01` | as S2 (the same `sN/p-…` segments), `as_of` = `H01_AS_OF` | none (rows go to P5) | cloud | the 160 H01 label roots | exists |
+| S13 | Deployment tables for H01 (`synapse_mapping`, `vertex_domains`, `domain_features`, `domain_predictions`) on the `h01_c3_flat` datastack, job `h01_test_cohort` | as S2 (the same `sN/p-…` segments and the same cutoff `features`) | none (rows go to P5) | cloud | the 160 H01 label roots | exists |
 
 ---
 
@@ -105,6 +109,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 - [x] Rebuild: `just materialize labeled_synapse_features`.
 - [x] Keep the three old s2 `labeled_synapse_features-*` files in `data/tables/v1822/` until P3 is retrained. The s2 paths are gone, so these files are the only copy of the features that `synapse_hks_model_on_bulk` was trained on.
 - [x] P3 is retrained on s3. Delete or archive the three old s2 files.
+- [x] V2: `products/sources.py` points at the s4 spectral tables, with the `features` cutoff (2026-10-21 18:45 UTC). The s3 cache stays as a stale key until the V1 caches are cleared.
 - [x] After the build: check the share of label synapses with non-null features, and check the failed merge root for partial rows from a crashed attempt.
   - Result: 111,640 of 133,686 synapse labels (83.5%) have all features, on 6,009 roots. The other synapse labels are on 12,683 roots with fewer than 5 labels, which the job did not include. The failed root `864691135858491438` (17 labels) has no rows, so no partial attempt is in the table. 10 roots have features for only some of their synapses.
 
@@ -191,7 +196,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
   The NEURD scores did not change, so the label side and the NEURD join agree with the old run.
 
 **P5 `h01_predictions`** (H01 labeled, 3,961 rows)
-- Origin: S12 ⋈ S13. Pin: S12 + S13 (`H01_AS_OF`). Kind: rebuildable. Code: `products/h01.py`. Cache folder: `data/tables/h01_c3_flat/v1054/`.
+- Origin: S12 ⋈ S13. Pin: S12 + S13 (the `features` cutoff for the features, the `predictions` cutoff for the predictions). Kind: rebuildable. Code: `products/h01.py`. Cache folder: `data/tables/h01_c3_flat/v1054/`.
 - Two cohorts: `validation` (the Fig 6 states, 80 roots, 1,980 label synapses) and `retrain` (a later labeling round, 80 other roots, 1,981 label synapses). `meshrep/sandbox/h01_relabeling.py` drew the retrain cells, and `meshrep/clean_paper_code/retrain_h01.py` read the states back.
 - [x] Run a deployment job on the `h01_c3_flat` datastack for the annotated roots, in the same format as the MICrONS jobs.
   - Job `h01` in meshmash-deployment, run `run-20261013-224416-dcc1`: all 160 roots passed all four steps. The last commit was at 2026-10-14 14:47 UTC. `H01_AS_OF` in `products/sources.py` is 15:00 UTC.
@@ -258,8 +263,8 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 
 - `load_root_cell(root_id, datastack)` in `products/roots.py` gives an ossify `Cell` for one root: the raw mesh, its domains (with `domain_features`, `distance_to_nucleus` and the deployment predictions), the synapses with their manual labels, and the nuclei. The module docstring lists the layers.
   - `ROOT_SOURCES` names, for each datastack, the cutoff, the synapse source and its resolution, the nuclei table and the label tables.
-  - H01: S13 (`vertex_domains`, `domain_features`, `domain_predictions`, `synapse_mapping`, and the synapse snapshot), `h01_root_nuclei`, `h01_labels`. Pin: `STEP_PINS` + `H01_AS_OF`.
-  - MICrONS: S2 + S3 at `MICRONS_AS_OF` (= `VALIDATION_AS_OF`, after both MICrONS jobs), S0 for the synapses (voxels x (4, 4, 40)), `root_nuclei`, and the labels of `synapse_labels` and `validation_labels`. Only the 132 validation roots have deployment predictions; the other roots have null deployment columns.
+  - H01: S13 (`vertex_domains`, `domain_features`, `domain_predictions`, `synapse_mapping`, and the synapse snapshot), `h01_root_nuclei`, `h01_labels`. Pin: `STEP_PINS` + the `predictions` cutoff (`ROOT_CUTOFF`).
+  - MICrONS: S2 + S3 at the `predictions` cutoff, S0 for the synapses (voxels x (4, 4, 40)), `root_nuclei`, and the labels of `synapse_labels` and `validation_labels`. Only the 132 validation roots have deployment predictions; the other roots have null deployment columns.
   - The mesh comes from CloudVolume through the CAVE segmentation source of the datastack.
   - The mesh kwargs come from `_meshmash/identity.json` of the pinned `vertex_domains` table, so the mesh is the one that `mesh_index` indexes. A different vertex count raises.
   - Without `allow_held_out=True`, a root of the H01 `validation` cohort raises.
@@ -339,7 +344,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 **P15 `synapse_posteriors`** (all)
 - Origin: S2 `synapse_mapping` ⋈ `vertex_domains` ⋈ S3 `domain_predictions`. Pin: S2 + S3. Kind: cloud (a lazy join).
 - [x] Register `synapse_posteriors`. The code is in `products/predictions.py`. P4 is the first product that reads it, on the 132 validation roots (68 seconds).
-  - `synapse_posteriors(synapses, as_of=...)` is the pinned read for products such as P4. The `synapse_posteriors` view in the registry reads the latest attempts, for exploration only.
+  - `synapse_posteriors(synapses, as_of=...)` is the pinned read for products such as P4.
   - It shares `synapse_domain_join` with P2 (`products/features.py`). The refactored P2 read matched the P2 cache on 52 synapses from 5 roots.
   - `products/sources.py` has the `domain_predictions` path `s1/p-96cea889064d4d41`. The `microns_validation` run wrote to this path. A change to the model or to the deployment step code moves this hash.
 - Gives the full posterior (`posterior_spine`, `posterior_shaft`, `posterior_soma`) and `pred_label` per synapse. No change to the deployment is needed.
@@ -352,12 +357,12 @@ The original records of these labels are neuroglancer states or notebooks. A sta
 - [ ] Recommendation: **drop these as stored products** and compute them in the figure script from P9 (1,352 rows each).
 - `pre_to_inh` is never read. Most `pre_*` columns that the figures use are already recomputed in-script.
 
-### Method benchmark track
+### Strawman comparison track
 
-**P14 `profile_benchmark`** (Fig 2B-E, `profile_*` glue)
+**P14 `profile_strawman`** (Fig 2B-E, `profile_*` glue)
 - Origin: S8. Pin: the S8 run names. Kind: rebuildable (only the figures are local).
 - A re-run on the new pipeline is likely. The fair way to compare the two approaches is still open (question 1).
-- [ ] Re-run the benchmarks on the new pipeline, after question 1 has an answer.
+- [ ] Re-run the strawman comparison on the new pipeline, after question 1 has an answer.
 - [ ] The save call for 2D (`test_accuracy_comparison_zoom`) is commented out in `profile_approaches.py`. Turn it back on.
 
 ---
@@ -424,7 +429,7 @@ Out of scope:
 
 ## Open questions
 
-1. Fig 2B-E benchmarks: what is a fair comparison between the naive and the proposed approach on the new pipeline?
+1. Fig 2B-E strawman comparison: what is a fair comparison between the naive and the proposed approach on the new pipeline?
 2. The `S#` source IDs clash with the supplementary figure numbers (Fig S2, S3 and so on). Rename the sources to `D#` or `SRC#`?
 
 ## Decisions

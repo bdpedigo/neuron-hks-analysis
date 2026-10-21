@@ -57,5 +57,5 @@ def build_cell_selection(version=VERSION) -> pl.DataFrame:
 Tables.register(
     "cell_selection",
     materialize=lambda path: write_parquet_atomic(build_cell_selection(), path),
-    cache_params={"version": VERSION},
+    cache_params=lambda: {"version": VERSION},
 )

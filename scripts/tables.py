@@ -15,6 +15,7 @@ import polars as pl
 
 from analysis import Tables
 from analysis.io import TABLE_PATH, VERSION
+from analysis.products.sources import UnpinnedError
 
 
 def _size(path: Path) -> int:
@@ -28,7 +29,10 @@ def materialize(name: str, force: bool) -> None:
         table = Tables[name]
     except KeyError as error:
         raise SystemExit(error.args[0])
-    path = table.cache_path
+    try:
+        path = table.cache_path
+    except UnpinnedError as error:
+        raise SystemExit(f"{name!r} is unpinned: {error.args[0]}")
     if path is None:
         raise SystemExit(f"{name!r} is {table.kind}, so it has no cache to build.")
     if path.exists() and not force:
@@ -51,7 +55,11 @@ def status() -> None:
     current = set()
     for name in Tables:
         table = Tables[name]
-        path = table.cache_path
+        try:
+            path = table.cache_path
+        except UnpinnedError:
+            rows.append((name, table.kind, "unpinned", ""))
+            continue
         if path is None:
             state, size = "-", ""
         elif path.exists():

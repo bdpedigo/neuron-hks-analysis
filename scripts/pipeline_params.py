@@ -2,20 +2,15 @@
 import json
 
 from analysis import save_variables
-from analysis.products.sources import (
-    DOMAIN_FEATURES_PARAMS,
-    DOMAIN_FEATURES_PATH,
-    DOMAIN_FEATURES_VERSION,
-)
+from analysis.products.sources import deployment_path, step_pin
 
 # The deployment writes the resolved parameters of the step that made the table
-# next to it, so these are the values the S2 run used, defaults included.
-with (DOMAIN_FEATURES_PATH / "_meshmash" / "identity.json").open("r") as f:
+# next to it, so these are the values the pinned run used, defaults included.
+with (deployment_path("domain_features") / "_meshmash" / "identity.json").open("r") as f:
     identity = json.load(f)
 
 assert identity["step"] == "condensed_spectral"
-assert identity["step_version"] == DOMAIN_FEATURES_VERSION
-assert identity["param_hash"] == DOMAIN_FEATURES_PARAMS
+assert (identity["step_version"], identity["param_hash"]) == step_pin("domain_features")
 params = identity["params"]
 
 # %%
