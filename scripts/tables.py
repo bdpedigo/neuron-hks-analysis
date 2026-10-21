@@ -17,9 +17,9 @@ import humanize
 import polars as pl
 
 from analysis import Tables
-from analysis.io import TABLE_PATH, VERSION
+from analysis.io import TABLE_PATH
 from analysis.products.catalog import condense_schema
-from analysis.products.sources import UnpinnedError
+from analysis.sources import VERSION, UnpinnedError
 
 
 def _size(path: Path) -> int:

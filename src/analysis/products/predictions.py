@@ -4,8 +4,8 @@ from datetime import datetime
 
 import polars as pl
 
+from ..sources import DATASTACK
 from .features import synapse_domain_join
-from .sources import DATASTACK
 
 
 def synapse_posteriors(

@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 from upath import UPath
 
 DATASTACK = "minnie65_phase3_v1"
+# The CAVE materialization version that the package and scripts read at.
+VERSION = 1822
+VERSION_TIMESTAMP = datetime(2026, 6, 27, 14, 5, 22, 813147, tzinfo=timezone.utc)
 BASE_CLOUD_PATH = UPath("gs://bdp-ssa/meshmash-deployment")
 
 # The cloud tables that the analysis reads, at one step version and parameter
@@ -77,14 +80,14 @@ def pin_params(*products: str, as_of: datetime) -> dict:
     }
 
 
-# S0: the public CAVE export of `synapses_pni_2` at v1822, the rows that the
+# S0: the public CAVE export of `synapses_pni_2` at `VERSION`, the rows that the
 # deployment mapped to the meshes. Positions are in voxels.
 MICRONS_SYNAPSES_PATH = UPath(
-    "gs://mat_dbs/public/deltalake_exports/minnie65_phase3_v1/v1822/synapses_pni_2/post_pt_root_id"
+    f"gs://mat_dbs/public/deltalake_exports/{DATASTACK}/v{VERSION}/synapses_pni_2/post_pt_root_id"
 )
 MICRONS_SYNAPSE_RESOLUTION = (4.0, 4.0, 40.0)
 
 # NOTE: the ossify skeletons (S5) carry the synapses at the time of the
-# skeleton, which is the v1822 timestamp. `skeleton.py` asserts this per file,
+# skeleton, which is `VERSION_TIMESTAMP`. `skeleton.py` asserts this per file,
 # because a file that is overwritten in place keeps its path.
 SKELETON_PATH = UPath("gs://csm-skel/osy/minnie65/skel")

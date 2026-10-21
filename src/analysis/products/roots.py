@@ -31,10 +31,7 @@ import polars as pl
 from caveclient import CAVEclient
 from ossify import Cell, Link
 
-from .catalog import Tables
-from .deployment import delta_table, latest_attempts, scan_roots
-from .features import add_distance_to_nucleus
-from .sources import (
+from ..sources import (
     DATASTACK,
     H01_DATASTACK,
     H01_SYNAPSES_PATH,
@@ -44,6 +41,9 @@ from .sources import (
     deployment_path,
     pin_params,
 )
+from .catalog import Tables
+from .deployment import delta_table, latest_attempts, scan_roots
+from .features import add_distance_to_nucleus
 
 # The sources and local tables of each datastack.
 # - `synapse_resolution`: nm per unit of the synapse positions in `synapses_path`.

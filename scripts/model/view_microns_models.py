@@ -13,7 +13,7 @@ import polars as pl
 
 from analysis import Tables
 from analysis.model_viewer import main
-from analysis.products.sources import DATASTACK
+from analysis.sources import DATASTACK
 
 POOLS = {
     "validation": lambda: Tables["validation_cells"].collect()["root_id"].to_list(),

@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from ..io import VERSION, load_neuron_info
+from ..io import load_neuron_info
+from ..sources import VERSION
 from .catalog import Tables, write_parquet_atomic
 
 COLUMN_SOURCE = "allen_v1_column_types_slanted_ref"

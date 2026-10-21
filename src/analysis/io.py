@@ -15,7 +15,8 @@ import pyvista as pv
 from caveclient import CAVEclient
 from joblib import Parallel, delayed, load
 from standard_transform.datasets import minnie_transform_nm
-import datetime
+
+from .sources import VERSION
 from .utils import project_points_to_mesh
 
 # src/analysis/ -> src/ -> neuron-hks-analysis/
@@ -26,11 +27,6 @@ FIG_PATH = PROJECT_ROOT / "figures"
 FONT_PATH = Path(matplotlib.get_data_path()) / "fonts" / "ttf" / "DejaVuSans.ttf"
 MESH_DATA_PATH = DATA_PATH / "computed_mesh_data"
 MODEL_PATH = DATA_PATH / "models"
-
-# default CAVE materialization version used across the package and scripts
-VERSION = 1822
-VERSION_TIMESTAMP = datetime.datetime(2026, 6, 27, 14, 5, 22, 813147, tzinfo=datetime.timezone.utc)
-
 
 
 def param_name(**kwargs):

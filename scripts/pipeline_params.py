@@ -2,7 +2,7 @@
 import json
 
 from analysis import save_variables
-from analysis.products.sources import deployment_path, step_pin
+from analysis.sources import deployment_path, step_pin
 
 # The deployment writes the resolved parameters of the step that made the table
 # next to it, so these are the values the pinned run used, defaults included.

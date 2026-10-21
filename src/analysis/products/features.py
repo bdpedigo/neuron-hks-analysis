@@ -8,12 +8,12 @@ from pathlib import Path
 import polars as pl
 from tqdm.auto import tqdm
 
+from ..sources import DATASTACK, cutoff, deployment_path, pin_params
 from . import labels  # noqa: F401 -- registers "labels", whose cache key P2 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", which the training view reads
 from .catalog import Tables
 from .deployment import latest_attempts, scan_roots
 from .partitions import hash_partition
-from .sources import DATASTACK, cutoff, deployment_path, pin_params
 
 
 def synapse_vertex_join(

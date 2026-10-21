@@ -3,9 +3,8 @@
 import polars as pl
 from caveclient import CAVEclient
 
-from ..io import VERSION
+from ..sources import DATASTACK, VERSION
 from .catalog import Tables, write_parquet_atomic
-from .sources import DATASTACK
 
 # NOTE: a root can have more than one nucleus (for example, a merge), so this
 # table has one row per nucleus, not per root. The feature is the distance to

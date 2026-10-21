@@ -8,9 +8,9 @@ from datetime import datetime
 
 import polars as pl
 
+from ..sources import DATASTACK, MICRONS_SYNAPSES_PATH, deployment_path
 from .deployment import delta_table, latest_attempts, scan_roots
 from .features import synapse_vertex_join
-from .sources import DATASTACK, MICRONS_SYNAPSES_PATH, deployment_path
 
 
 def synapse_structure_join(

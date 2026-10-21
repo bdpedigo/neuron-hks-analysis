@@ -22,8 +22,6 @@ from .io import (
     MODEL_PATH,
     MTYPE_CATEGORIES,
     PROJECT_ROOT,
-    VERSION,
-    VERSION_TIMESTAMP,
     load_model,
     load_neuron_info,
     load_signatures,
@@ -34,6 +32,8 @@ from .io import (
     save_matplotlib_figure,
     save_pyvista_figure,
 )
+from .products import Tables
+from .products.labels import get_label_table, get_validation_ids
 from .pyvista import (
     crop_to_circle,
     get_camera_vector,
@@ -43,16 +43,7 @@ from .pyvista import (
     set_up_camera,
 )
 from .skeleton import mask_dendrite_by_client_skeleton
-from .tables import (
-    TABLE_PATHS,
-    add_cell_info,
-    add_extended_skeleton_info,
-    add_predictions,
-    add_skeleton_info,
-    add_spatial_mappings,
-    add_spine_components,
-    add_spine_morphometry,
-)
+from .sources import VERSION, VERSION_TIMESTAMP
 from .utils import (
     cell_type_mapper,
     get_experiment_info,
@@ -66,8 +57,6 @@ from .utils import (
     set_pyvista_theme,
 )
 from .wrangle import get_synapse_sizes
-from .products import Tables
-from .products.labels import get_label_table, get_validation_ids
 
 __all__ = [
     "load_signatures",
@@ -107,17 +96,9 @@ __all__ = [
     "LABEL_CATEGORIES",
     "LABEL_DETAILED_CATEGORIES",
     "COMPARTMENT_CATEGORIES",
-    "TABLE_PATHS",
     "COMPARTMENT_PALETTE_BREWER2",
     "COMPARTMENT_PALETTE_BREWER2_HEX",
     "cell_type_mapper",
-    "add_cell_info",
-    "add_extended_skeleton_info",
-    "add_skeleton_info",
-    "add_spatial_mappings",
-    "add_spine_components",
-    "add_spine_morphometry",
-    "add_predictions",
     "crop_to_circle",
     "get_camera_vector",
     "make_composite_figure",

@@ -19,10 +19,10 @@ import polars as pl
 from caveclient import CAVEclient
 from nglui.parser import StateParser
 
-from ..io import TABLE_PATH, VERSION
+from ..io import TABLE_PATH
+from ..sources import DATASTACK, VERSION, cutoff, pin_params
 from .catalog import Tables, write_parquet_atomic
 from .labels import fetch_nucleus_roots
-from .sources import DATASTACK, cutoff, pin_params
 from .structures import read_structures, structure_pre_roots, synapse_structure_join
 
 UNITARY_TABLE_PATH = TABLE_PATH / "unitary_spines"

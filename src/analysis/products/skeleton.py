@@ -11,13 +11,12 @@ import polars as pl
 from ossify.algorithms import subtree_aggregate
 from tqdm.auto import tqdm
 
-from ..io import VERSION, VERSION_TIMESTAMP
+from ..sources import SKELETON_PATH, VERSION, VERSION_TIMESTAMP
 from . import cell_selection  # noqa: F401 -- registers "cell_selection", whose cache key P8 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", whose cache key P8 reads
 from .catalog import Tables
 from .features import add_distance_to_nucleus
 from .partitions import hash_partition
-from .sources import SKELETON_PATH
 
 SIDES = {"pre": "pre_syn", "post": "post_syn"}
 COMPARTMENTS = ["axon", "dendrite", "soma"]

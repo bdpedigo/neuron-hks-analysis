@@ -10,7 +10,7 @@ in the pool, and `load_root_cell` refuses its roots.
 
 from analysis import Tables
 from analysis.model_viewer import main
-from analysis.products.sources import H01_DATASTACK
+from analysis.sources import H01_DATASTACK
 
 POOLS = {"retrain": lambda: Tables["h01_retrain_cells"].collect()["root_id"].to_list()}
 

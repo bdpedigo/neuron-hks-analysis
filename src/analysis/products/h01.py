@@ -20,10 +20,7 @@ import polars as pl
 from nglui.parser import StateParser
 
 from ..io import TABLE_PATH
-from .catalog import Tables, write_parquet_atomic
-from .features import add_distance_to_nucleus, synapse_domain_join
-from .predictions import synapse_posteriors
-from .sources import (
+from ..sources import (
     H01_DATASTACK,
     H01_INPUTS_PATH,
     H01_NUCLEI_PATH,
@@ -32,6 +29,9 @@ from .sources import (
     cutoff,
     pin_params,
 )
+from .catalog import Tables, write_parquet_atomic
+from .features import add_distance_to_nucleus, synapse_domain_join
+from .predictions import synapse_posteriors
 
 H01_TABLE_PATH = TABLE_PATH / "h01"
 H01_FOLDER = f"{H01_DATASTACK}/v{H01_VERSION}"

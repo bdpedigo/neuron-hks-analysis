@@ -5,8 +5,8 @@ from typing import Callable, Optional
 
 import polars as pl
 
-from ..io import TABLE_PATH, VERSION, param_hash
-from .sources import UnpinnedError
+from ..io import TABLE_PATH, param_hash
+from ..sources import VERSION, UnpinnedError
 
 
 class Table:

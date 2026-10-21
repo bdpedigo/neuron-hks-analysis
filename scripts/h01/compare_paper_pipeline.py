@@ -22,7 +22,7 @@ import polars as pl
 from analysis import Tables
 from analysis.products.deployment import latest_attempts, scan_roots
 from analysis.products.paper_h01 import PAPER_H01_PATH, load_paper_root, paper_nuclei
-from analysis.products.sources import H01_DATASTACK, cutoff, deployment_path
+from analysis.sources import H01_DATASTACK, cutoff, deployment_path
 
 retrain_roots = (
     Tables["h01_cells"].lazy().filter(pl.col("cohort") == "retrain").collect()["root_id"].to_list()

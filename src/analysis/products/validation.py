@@ -3,11 +3,10 @@
 import polars as pl
 from caveclient import CAVEclient
 
-from ..io import VERSION
+from ..sources import DATASTACK, VERSION, cutoff, pin_params
 from . import labels  # noqa: F401 -- registers "validation_labels", whose cache key P4 reads
 from .catalog import Tables, write_parquet_atomic
 from .predictions import synapse_posteriors
-from .sources import DATASTACK, cutoff, pin_params
 
 # The `value` codes of the NEURD table `synapse_target_structure`.
 NEURD_DETAILED_LABELS = {

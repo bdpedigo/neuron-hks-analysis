@@ -25,7 +25,7 @@ from analysis.models import load_ssa_model, predict
 from analysis.products.paper_h01 import load_paper_root, paper_vertex_posteriors
 from analysis.products.root_cache import cached
 from analysis.products.roots import NO_DOMAIN, domain_frame, load_root_cell
-from analysis.products.sources import H01_DATASTACK
+from analysis.sources import H01_DATASTACK
 from analysis.viz import Channel, View, add_prediction, cell_to_scene, render_panel
 
 # The 5 retrain cells with the most soma labels, and the cell with the largest

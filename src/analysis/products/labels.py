@@ -8,9 +8,9 @@ import polars as pl
 from caveclient import CAVEclient
 from pytz import utc
 
-from ..io import TABLE_PATH, VERSION
+from ..io import TABLE_PATH
+from ..sources import DATASTACK, VERSION
 from .catalog import Tables, write_parquet_atomic
-from .sources import DATASTACK
 
 TABLE_WEIGHTS = {
     "vortex_compartment_targets": 1,

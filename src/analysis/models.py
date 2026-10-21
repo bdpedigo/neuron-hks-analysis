@@ -15,7 +15,7 @@ import polars as pl
 from sklearn.ensemble import RandomForestClassifier
 
 from .io import MODEL_PATH
-from .products.sources import step_pin
+from .sources import step_pin
 
 FEATURE_PREFIXES = ("hks_", "curvature_", "normal_")
 

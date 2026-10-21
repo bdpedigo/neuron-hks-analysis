@@ -8,7 +8,6 @@ import seaborn as sns
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 from tqdm.auto import tqdm
-from upath import UPath
 
 from analysis import (
     FIG_PATH,
@@ -36,14 +35,6 @@ from analysis.products.features import MIN_ROOT_LABELS
 # NOTE: with RETRAIN off, a variant whose model folder exists is loaded, not
 # trained again. The folders at MODEL_VERSION are what the deployment publishes.
 RETRAIN = False
-
-# %%
-
-datastack = "minnie65_phase3_v1"
-base = "gs://bdp-ssa/meshmash-deployment"
-out = "scratch_data/synapse_hks_features.parquet"
-base = UPath(base)
-
 
 # %%
 

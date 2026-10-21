@@ -26,7 +26,7 @@ from .models import MODEL_SPECS, load_ssa_model, predict
 from .products.paper_h01 import load_paper_root, paper_vertex_posteriors
 from .products.root_cache import cached
 from .products.roots import domain_frame, feature_columns, load_root_cell
-from .products.sources import H01_DATASTACK
+from .sources import H01_DATASTACK
 from .viz import CellOrder, Slider, Viewer, add_prediction, cell_to_scene
 
 # The retrained models come from the last cell of `scripts/h01/retrain_h01.py`.
