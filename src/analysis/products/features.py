@@ -212,11 +212,21 @@ def add_distance_to_nucleus(
     )
 
 
+# The models train only on roots with at least this many synapse labels, the same
+# rule as the labeled roots of the deployment test cohort
+# (meshmash-deployment jobs/test_cohort/select.py). The count is per root, over
+# all of its labels, with or without features.
+MIN_ROOT_LABELS = 5
+
+
 # NOTE: meshmash-deployment computes `distance_to_nucleus` in its prediction step,
 # not in `domain_features`, so the training rows get the feature here
 Tables.register(
     "model_inputs",
     lambda: add_distance_to_nucleus(
-        Tables["labeled_synapse_features"].lazy(), Tables["root_nuclei"].lazy()
+        Tables["labeled_synapse_features"]
+        .lazy()
+        .filter(pl.len().over("root_id") >= MIN_ROOT_LABELS),
+        Tables["root_nuclei"].lazy(),
     ),
 )

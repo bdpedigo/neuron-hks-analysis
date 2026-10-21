@@ -31,9 +31,10 @@ from analysis.models import (
     save_model,
     select_spectral_columns,
 )
+from analysis.products.features import MIN_ROOT_LABELS
 
 # NOTE: with RETRAIN off, a variant whose model folder exists is loaded, not
-# trained again. The `_v1` folders are what the deployment published.
+# trained again. The folders at MODEL_VERSION are what the deployment publishes.
 RETRAIN = False
 
 # %%
@@ -71,6 +72,7 @@ training_table = result.drop_nulls(subset=spectral_columns).to_pandas().set_inde
 sample_weight = training_table["sample_weight"].astype(float)
 
 save_variables(model_n_training_synapses=len(training_table), format="{:,}")
+save_variables(params_min_root_labels=MIN_ROOT_LABELS)
 
 # The nucleus mask: see `analysis.models`.
 save_variables(params_nucleus_mask_fraction=NUCLEUS_MASK_FRACTION)

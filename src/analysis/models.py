@@ -41,7 +41,7 @@ MODEL_SPECS = {
 MAIN_MODEL = "ssa_model_full"
 # NOTE: a published model name is write-once in meshmash-deployment, so bump this
 # before publishing a retrained model.
-MODEL_VERSION = "v1"
+MODEL_VERSION = "v2"
 
 RF_PARAMS = dict(class_weight="balanced", max_depth=15, n_estimators=500)
 
