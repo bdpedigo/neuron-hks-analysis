@@ -53,7 +53,30 @@ def fetch_neurd_labels(client, synapse_ids: list[int], version=VERSION) -> pl.Da
     )
 
 
-def build_validation_predictions(client, validation_labels: pl.DataFrame) -> pl.DataFrame:
+Tables.register(
+    "neurd_labels",
+    description=(
+        "The NEURD (S7) label of each validation synapse that NEURD labeled, from the "
+        "CAVE table `synapse_target_structure`. `neurd_label` is null for the axon "
+        "labels, which have no class in the validation labels."
+    ),
+    materialize=lambda path: write_parquet_atomic(
+        fetch_neurd_labels(
+            CAVEclient(DATASTACK),
+            Tables["validation_labels"].collect()["synapse_id"].to_list(),
+        ),
+        path,
+    ),
+    cache_params=lambda: {
+        "version": VERSION,
+        "validation_labels": Tables["validation_labels"].cache_key,
+    },
+)
+
+
+def build_validation_predictions(
+    validation_labels: pl.DataFrame, neurd_labels: pl.DataFrame
+) -> pl.DataFrame:
     """`validation_labels` with the HKS posteriors and `pred_label` of each synapse,
     and its NEURD label.
 
@@ -61,26 +84,26 @@ def build_validation_predictions(client, validation_labels: pl.DataFrame) -> pl.
     its cell (`on_cell` false) has null posteriors.
     """
     predictions = synapse_posteriors(validation_labels, as_of=cutoff("validation"))
-    neurd = fetch_neurd_labels(client, validation_labels["synapse_id"].to_list())
-    return predictions.join(neurd, on="synapse_id", how="left")
+    return predictions.join(neurd_labels, on="synapse_id", how="left")
 
 
 Tables.register(
     "validation_predictions",
     description=(
         "`validation_labels` with the deployment posteriors and `pred_label` of each "
-        "synapse, and its NEURD label from the CAVE table `synapse_target_structure`. "
-        "Read by the validation and NEURD comparison figures."
+        "synapse, joined to `neurd_labels`. Read by the validation and NEURD "
+        "comparison figures."
     ),
     materialize=lambda path: write_parquet_atomic(
         build_validation_predictions(
-            CAVEclient(DATASTACK), Tables["validation_labels"].collect()
+            Tables["validation_labels"].collect(), Tables["neurd_labels"].collect()
         ),
         path,
     ),
     cache_params=lambda: {
         "version": VERSION,
         "validation_labels": Tables["validation_labels"].cache_key,
+        "neurd_labels": Tables["neurd_labels"].cache_key,
         **pin_params(
             "synapse_mapping",
             "vertex_domains",
