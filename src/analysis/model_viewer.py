@@ -22,7 +22,7 @@ import argparse
 from collections.abc import Callable, Sequence
 from functools import partial
 
-from .models import MODEL_SPECS, load_ssa_model, predict
+from .models import MODEL_SPECS, MODEL_VERSION, load_ssa_model, predict
 from .products.paper_h01 import load_paper_root, paper_vertex_posteriors
 from .products.root_cache import cached
 from .products.roots import domain_frame, feature_columns, load_root_cell
@@ -33,7 +33,7 @@ from .viz import CellOrder, Slider, Viewer, add_prediction, cell_to_scene
 TRAINING = {"no retrain": "", "retrain": "_h01"}
 VARIANTS = {name.removeprefix("ssa_model_"): name for name in MODEL_SPECS}
 MODELS = {
-    f"{training}/{variant}": f"{name}{suffix}_v1"
+    f"{training}/{variant}": f"{name}{suffix}_{MODEL_VERSION}"
     for training, suffix in TRAINING.items()
     for variant, name in VARIANTS.items()
 }
