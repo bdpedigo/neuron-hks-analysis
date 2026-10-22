@@ -229,13 +229,13 @@ Tables.register(
     "h01_labeled_synapse_features",
     description=(
         "`h01_labels` with the spectral features of the mesh domain of each synapse, "
-        "in the columns of `labeled_synapse_features`. Read at the `features` cutoff."
+        "in the columns of `labeled_synapse_features`. Read at the `training` cutoff."
     ),
     materialize=lambda path: write_parquet_atomic(
         synapse_domain_join(
             Tables["h01_labels"].collect(),
             "domain_features",
-            as_of=cutoff("features"),
+            as_of=cutoff("training"),
             datastack=H01_DATASTACK,
         ),
         path,
@@ -243,7 +243,7 @@ Tables.register(
     cache_params=lambda: {
         "h01_labels": Tables["h01_labels"].cache_key,
         **pin_params(
-            "synapse_mapping", "vertex_domains", "domain_features", as_of=cutoff("features")
+            "synapse_mapping", "vertex_domains", "domain_features", as_of=cutoff("training")
         ),
     },
     folder=H01_FOLDER,
@@ -272,7 +272,7 @@ Tables.register(
     ),
     materialize=lambda path: write_parquet_atomic(
         synapse_posteriors(
-            Tables["h01_labels"].collect(), as_of=cutoff("predictions"), datastack=H01_DATASTACK
+            Tables["h01_labels"].collect(), as_of=cutoff("validation"), datastack=H01_DATASTACK
         ),
         path,
     ),
@@ -282,7 +282,7 @@ Tables.register(
             "synapse_mapping",
             "vertex_domains",
             "domain_predictions",
-            as_of=cutoff("predictions"),
+            as_of=cutoff("validation"),
         ),
     },
     folder=H01_FOLDER,

@@ -204,12 +204,12 @@ Tables.register(
         "`structure_id` of its new structure."
     ),
     materialize=lambda path: write_parquet_atomic(
-        build_unitary_label_outcomes(cutoff("spines")), path
+        build_unitary_label_outcomes(cutoff("unitary_training")), path
     ),
     cache_params=lambda: {
         "label_version": LABEL_VERSION,
         "unitary_label_cells": Tables["unitary_label_cells"].cache_key,
-        **pin_params(*STRUCTURE_PRODUCTS, as_of=cutoff("spines")),
+        **pin_params(*STRUCTURE_PRODUCTS, as_of=cutoff("unitary_training")),
     },
 )
 
@@ -283,7 +283,7 @@ Tables.register(
         "model."
     ),
     materialize=lambda path: write_parquet_atomic(
-        build_unitary_training_spines(cutoff("spines")), path
+        build_unitary_training_spines(cutoff("unitary_training")), path
     ),
     cache_params=lambda: {"unitary_label_outcomes": Tables["unitary_label_outcomes"].cache_key},
 )

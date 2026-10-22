@@ -20,6 +20,9 @@ STEP_PINS = {
     "vertex_domains": ("s4", "p-2e737b09a92af64d"),
     "domain_features": ("s4", "p-e758527c9d981378"),
     "domain_edges": ("s4", "p-b60a113f02ed8102"),
+    # The hash includes the model URI, here ssa_model_full_v2.
+    "domain_predictions": ("s1", "p-c6071657570ccf34"),
+    "synapse_predictions": ("s1", "p-9afb050cbd359710"),
 }
 
 
@@ -58,11 +61,19 @@ H01_NUCLEI_PATH = H01_INPUTS_PATH / "nucleus" / "flat"
 # One table can have more than one cutoff: the training features keep theirs
 # when the full run appends rows. So a product chooses its cutoff, and the read
 # functions take it as an argument. A product reads all of its tables at the
-# cutoff of its newest input.
+# cutoff of its newest input. A cutoff is named for the use of the rows it reads.
+# NOTE: a full run with the same spec and models appends to the pinned tables,
+# so it adds a cutoff (for example, "census") and keeps STEP_PINS. A run with
+# other parameters or models writes new tables, which need new pins.
 CUTOFFS = {
-    # The features of the MICrONS and H01 test cohorts were complete at this
-    # time (last data commits 2026-10-21 16:58 UTC and 01:55 UTC).
-    "features": datetime(2026, 10, 21, 18, 45, tzinfo=timezone.utc),
+    # The features that train and score the domain models. The features of the
+    # MICrONS and H01 test cohorts were complete at this time (last data commits
+    # 2026-10-21 16:58 UTC and 01:55 UTC).
+    "training": datetime(2026, 10, 21, 18, 45, tzinfo=timezone.utc),
+    # The deployment predictions that the validation figures score. The
+    # predictions of the MICrONS and H01 test cohorts were complete at this time
+    # (last data commits 2026-10-21 23:15 UTC and 21:44 UTC).
+    "validation": datetime(2026, 10, 21, 23, 20, tzinfo=timezone.utc),
 }
 
 

@@ -155,16 +155,16 @@ Tables.register(
     description=(
         "One row per labeled synapse (from `synapse_labels`), with the spectral "
         "features of the mesh domain that it maps to and the domain and mesh "
-        "component sizes. Read from the deployment tables at the `features` cutoff. "
+        "component sizes. Read from the deployment tables at the `training` cutoff. "
         "These are the training rows of the synapse models."
     ),
     materialize=lambda path: write_synapse_features(
-        Tables["synapse_labels"].collect(), path, as_of=cutoff("features")
+        Tables["synapse_labels"].collect(), path, as_of=cutoff("training")
     ),
     cache_params=lambda: {
         "labels": Tables["labels"].cache_key,
         **pin_params(
-            "synapse_mapping", "vertex_domains", "domain_features", as_of=cutoff("features")
+            "synapse_mapping", "vertex_domains", "domain_features", as_of=cutoff("training")
         ),
     },
 )

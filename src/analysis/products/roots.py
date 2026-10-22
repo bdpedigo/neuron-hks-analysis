@@ -73,7 +73,7 @@ ROOT_SOURCES = {
 LABELS = ("spine", "shaft", "soma")
 ROOT_PRODUCTS = ("vertex_domains", "domain_features", "domain_predictions", "synapse_mapping")
 # The newest of `ROOT_PRODUCTS` is `domain_predictions`, so a root reads at its cutoff.
-ROOT_CUTOFF = "predictions"
+ROOT_CUTOFF = "validation"
 
 # The `domains` row for a vertex in no domain. Above any real domain id.
 NO_DOMAIN = np.iinfo(np.int32).max

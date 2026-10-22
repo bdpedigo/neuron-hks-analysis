@@ -60,7 +60,7 @@ def build_validation_predictions(client, validation_labels: pl.DataFrame) -> pl.
     The posteriors are joined on `root_id` (the cell), so a synapse that is not on
     its cell (`on_cell` false) has null posteriors.
     """
-    predictions = synapse_posteriors(validation_labels, as_of=cutoff("predictions"))
+    predictions = synapse_posteriors(validation_labels, as_of=cutoff("validation"))
     neurd = fetch_neurd_labels(client, validation_labels["synapse_id"].to_list())
     return predictions.join(neurd, on="synapse_id", how="left")
 
@@ -85,7 +85,7 @@ Tables.register(
             "synapse_mapping",
             "vertex_domains",
             "domain_predictions",
-            as_of=cutoff("predictions"),
+            as_of=cutoff("validation"),
         ),
     },
 )
