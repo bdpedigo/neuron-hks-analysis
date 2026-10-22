@@ -459,6 +459,14 @@ COMPARTMENT_CATEGORIES = ["axon", "dendrite", "perisoma", "unknown"]
 
 TABLE_PATH = DATA_PATH / "tables"
 
+# Frozen files: the local copy is the only record, and no code rebuilds it. Do
+# not delete anything here.
+FROZEN_PATH = DATA_PATH / "frozen"
+# The AIBS cell info (nucleus ID, root ID and cell type per cell) at v1412,
+# which CAVE no longer serves. It maps v1412 root IDs to nucleus IDs. For the
+# cell info at `VERSION`, use `load_neuron_info`.
+V1412_CELL_INFO_PATH = FROZEN_PATH / "minnie65_v1412_aibs_cell_info.csv.gz"
+
 
 def cache_table(name: str):
     """Decorator caching a wrapped function's DataFrame result as parquet under TABLE_PATH/v{version}.

@@ -19,7 +19,7 @@ import polars as pl
 from caveclient import CAVEclient
 from nglui.parser import StateParser
 
-from ..io import TABLE_PATH
+from ..io import TABLE_PATH, V1412_CELL_INFO_PATH
 from ..sources import DATASTACK, VERSION, cutoff, pin_params
 from .catalog import Tables, write_parquet_atomic
 from .labels import fetch_nucleus_roots
@@ -27,7 +27,6 @@ from .structures import read_structures, structure_pre_roots, synapse_structure_
 
 UNITARY_TABLE_PATH = TABLE_PATH / "unitary_spines"
 LABEL_VERSION = 1412
-LABEL_CELL_INFO_PATH = TABLE_PATH / f"v{LABEL_VERSION}" / "aibs_cell_info.csv.gz"
 # The old pipeline's synapse -> spine map (meshrep/tools/pull_morphometry.py), a
 # frozen local copy. `index` is the synapse ID.
 OLD_COMPONENT_PATH = (
@@ -65,7 +64,7 @@ def read_unitary_annotations() -> pl.DataFrame:
 def fetch_unitary_label_cells(client, version=VERSION) -> pl.DataFrame:
     """The label cells: v1412 root -> nucleus ID -> root ID at `version`."""
     label_roots = read_unitary_annotations()["label_root_id"].unique().to_list()
-    cell_info = pd.read_csv(LABEL_CELL_INFO_PATH, usecols=["id", "pt_root_id", "cell_type"])
+    cell_info = pd.read_csv(V1412_CELL_INFO_PATH, usecols=["id", "pt_root_id", "cell_type"])
     cell_info = cell_info[cell_info["pt_root_id"].isin(label_roots)]
     assert cell_info["pt_root_id"].is_unique, "a label root has more than one nucleus"
     assert len(cell_info) == len(label_roots), "a label root has no nucleus at v1412"
