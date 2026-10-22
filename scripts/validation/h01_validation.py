@@ -3,7 +3,7 @@
 
 Ported from meshrep/sandbox/h01_validation.py. The predictions come from the
 deployment `h01` job (P5 `h01_predictions`), not from a local run of an older
-model. The mesh panel (6D) and the composite are not ported yet.
+model. The mesh panel (6D) and the composite are in h01_mesh_panel.py.
 """
 
 import pandas as pd
