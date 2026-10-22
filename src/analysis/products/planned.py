@@ -4,15 +4,6 @@ that the catalog can list them. Move a table to its own module when it is built.
 from .catalog import Tables
 
 Tables.register(
-    "synapse_structure",
-    description=(
-        "One row per synapse, with the spine structure (`structure_id`) that it is on, "
-        "from the deployment tables `synapse_mapping` and `vertex_structures`. Per "
-        "structure, it also gives the synapse count, the number of presynaptic roots "
-        "and whether the spine is multi-input. Covers all synapses."
-    ),
-)
-Tables.register(
     "selection_synapses",
     description=(
         "One row per synapse in the census selection: the synapses from a proofread "

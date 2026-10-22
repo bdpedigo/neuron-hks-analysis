@@ -5,7 +5,9 @@ key it by `root_id` and the pins in `sources.py`.
 """
 
 from datetime import datetime
+from functools import lru_cache
 
+import numpy as np
 import polars as pl
 
 from ..sources import DATASTACK, MICRONS_SYNAPSES_PATH, deployment_path
@@ -50,38 +52,158 @@ def read_structures(
     return joined.sort("root_id", "structure_id")
 
 
+# NOTE: the domain predictions also have `pred_label` and `posterior_entropy`, so
+# the unitary-spine columns take a prefix. The posterior class names differ.
+UNITARY_RENAMES = {
+    "pred_label": "unitary_pred_label",
+    "posterior_entropy": "unitary_posterior_entropy",
+}
+
+
 def read_structure_predictions(
     root_ids: list[int], *, as_of: datetime, datastack: str = DATASTACK
 ) -> pl.DataFrame:
-    """`structure_predictions`, one row per structure of `root_ids` at `as_of`."""
+    """`structure_predictions` (the unitary-spine model), one row per structure of
+    `root_ids` at `as_of`, with `pred_label` and `posterior_entropy` renamed as in
+    `UNITARY_RENAMES`."""
     (predictions,) = latest_attempts(
         [scan_roots(deployment_path("structure_predictions", datastack), root_ids, as_of=as_of)]
     )
-    return predictions.collect(engine="streaming").sort("root_id", "structure_id")
+    return (
+        predictions.collect(engine="streaming")
+        .rename(UNITARY_RENAMES)
+        .sort("root_id", "structure_id")
+    )
 
 
-def structure_pre_roots(
-    root_ids: list[int], *, as_of: datetime
-) -> pl.DataFrame:
-    """`root_id`, `structure_id` and `n_pre_root_ids`, the number of distinct
-    presynaptic roots (S0, v1822) among the synapses on each structure of `root_ids`.
+# NOTE: the synapse table is range-partitioned on `post_pt_root_id`, and Polars
+# cannot derive the partition from a root ID. Each file's min and max root in the
+# Delta log give the ranges.
+@lru_cache
+def _synapse_partition_ranges() -> pl.DataFrame:
+    actions = pl.from_arrow(delta_table(str(MICRONS_SYNAPSES_PATH)).get_add_actions(flatten=True))
+    ranges = (
+        actions.group_by(pl.col("partition.post_pt_root_id_partition").alias("partition"))
+        .agg(
+            pl.col("min.post_pt_root_id").min().alias("lo"),
+            pl.col("max.post_pt_root_id").max().alias("hi"),
+        )
+        .sort("lo")
+    )
+    assert (ranges["lo"].shift(-1) > ranges["hi"]).all(), "the synapse partitions overlap"
+    return ranges
 
-    A structure with no mapped synapse has no row.
+
+def synapse_partitions(root_ids: list[int]) -> list[int]:
+    """The synapse-table partitions that hold the post roots `root_ids`."""
+    ranges = _synapse_partition_ranges()
+    roots = np.asarray(root_ids, dtype=np.int64)
+    index = np.searchsorted(ranges["lo"].to_numpy(), roots, side="right") - 1
+    # A root outside every range has no synapses in the table.
+    inside = (index >= 0) & (roots <= ranges["hi"].to_numpy()[np.maximum(index, 0)])
+    return sorted(set(ranges["partition"].to_numpy()[index[inside]].tolist()))
+
+
+def _root_synapses(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
+    """`synapse_id`, `root_id`, `pre_pt_root_id` and `structure_id` of every synapse
+    in the synapse table (v1822) onto the post roots `root_ids`.
+
+    `structure_id` is null for a synapse in no structure, and for a synapse whose
+    root the deployment has not processed.
     """
     synapses = (
         pl.scan_delta(delta_table(str(MICRONS_SYNAPSES_PATH)))
-        .filter(pl.col("post_pt_root_id").is_in(root_ids))
+        .filter(
+            pl.col("post_pt_root_id_partition").is_in(synapse_partitions(root_ids)),
+            pl.col("post_pt_root_id").is_in(root_ids),
+        )
         .select(
-            pl.col("post_pt_root_id").alias("root_id"),
             pl.col("id").alias("synapse_id"),
+            pl.col("post_pt_root_id").alias("root_id"),
             pl.col("pre_pt_root_id"),
         )
         .collect()
     )
+    return synapse_structure_join(synapses, as_of=as_of)
+
+
+def _count_inputs(synapses: pl.DataFrame) -> pl.DataFrame:
+    """`n_synapses` and `n_pre_root_ids` (distinct presynaptic roots) per
+    (`root_id`, `structure_id`), from synapses with a `structure_id`.
+
+    A structure with no synapse has no row.
+    """
     return (
-        synapse_structure_join(synapses, as_of=as_of)
-        .drop_nulls("structure_id")
+        synapses.drop_nulls("structure_id")
         .group_by("root_id", "structure_id")
-        .agg(pl.col("pre_pt_root_id").n_unique().alias("n_pre_root_ids"))
+        .agg(
+            pl.len().alias("n_synapses"),
+            pl.col("pre_pt_root_id").n_unique().alias("n_pre_root_ids"),
+        )
         .sort("root_id", "structure_id")
     )
+
+
+def _add_is_multi(structures: pl.DataFrame) -> pl.DataFrame:
+    """Add `is_multi`: more than one presynaptic root, and the unitary-spine model
+    calls the structure one spine. A structure with no prediction is not multi-input.
+    """
+    return structures.with_columns(
+        is_multi=(
+            (pl.col("n_pre_root_ids") > 1) & (pl.col("unitary_pred_label") == "unitary")
+        ).fill_null(False)
+    )
+
+
+def _read_synapse_structure(
+    root_ids: list[int], *, as_of: datetime
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    synapses = _root_synapses(root_ids, as_of=as_of)
+    # NOTE: the full join keeps a structure with synapses but no prediction (its
+    # root is not predicted yet) and a predicted structure with no synapse.
+    structures = (
+        _count_inputs(synapses)
+        .join(
+            read_structure_predictions(root_ids, as_of=as_of),
+            on=["root_id", "structure_id"],
+            how="full",
+            coalesce=True,
+        )
+        .with_columns(pl.col("n_synapses", "n_pre_root_ids").fill_null(0))
+        .pipe(_add_is_multi)
+        .sort("root_id", "structure_id")
+    )
+    return synapses, structures
+
+
+def spine_structures(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
+    """One row per spine structure of the post roots `root_ids` at `as_of`, keyed
+    by (`root_id`, `structure_id`).
+
+    - `n_synapses` and `n_pre_root_ids`: the synapses on the structure and their
+      distinct presynaptic roots, from every synapse in the synapse table (v1822)
+      on the root, not from a selection.
+    - `posterior_unitary`, `posterior_not_unitary`, `unitary_pred_label` and
+      `unitary_posterior_entropy`: the unitary-spine model, null for a structure
+      with no prediction.
+    - `is_multi`: see `_add_is_multi`.
+
+    It reads every table at `as_of`. To scan many roots, call it on the roots of
+    one hash bucket at a time.
+    """
+    return _read_synapse_structure(root_ids, as_of=as_of)[1]
+
+
+def synapse_structure(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
+    """One row per synapse in the synapse table (v1822) onto the post roots
+    `root_ids`, with `synapse_id`, `root_id`, `pre_pt_root_id`, the `structure_id`
+    of the spine structure it is on (from `synapse_mapping` and
+    `vertex_structures`), and the columns of `spine_structures` for that structure.
+
+    The structure columns are null for a synapse in no structure. This replaces the
+    old synapse component table. It is a cloud product: a lazy read per root set,
+    with no cache. To scan many roots, call it on the roots of one hash bucket at a
+    time.
+    """
+    synapses, structures = _read_synapse_structure(root_ids, as_of=as_of)
+    return synapses.join(structures, on=["root_id", "structure_id"], how="left")

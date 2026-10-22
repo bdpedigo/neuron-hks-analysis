@@ -27,6 +27,8 @@ STEP_PINS = {
     "structure_morphometry": ("s2", "p-f3d682d0163596cb"),
     "structure_features": ("s2", "p-e78df7b56789c3e0"),
     "structure_anchors": ("s1", "p-63a99efc6ccae702"),
+    # The hash includes the model URI, here unitary_hks_v2.
+    "structure_predictions": ("s1", "p-145bf856dcf23c7a"),
 }
 
 
@@ -82,6 +84,10 @@ CUTOFFS = {
     # the MICrONS test cohort were complete at this time (last data commit
     # 2026-10-22 12:15 UTC).
     "unitary_training": datetime(2026, 10, 22, 12, 20, tzinfo=timezone.utc),
+    # The census products on the MICrONS test cohort, which read every table
+    # through the unitary predictions. The predictions were complete at this time
+    # (last data commit 2026-10-22 19:30 UTC). The full run adds a "census" cutoff.
+    "test_census": datetime(2026, 10, 22, 19, 35, tzinfo=timezone.utc),
 }
 
 

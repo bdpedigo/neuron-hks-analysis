@@ -23,7 +23,7 @@ from ..io import TABLE_PATH
 from ..sources import DATASTACK, VERSION, cutoff, pin_params
 from .catalog import Tables, write_parquet_atomic
 from .labels import fetch_nucleus_roots
-from .structures import read_structures, structure_pre_roots, synapse_structure_join
+from .structures import _count_inputs, _root_synapses, read_structures, synapse_structure_join
 
 UNITARY_TABLE_PATH = TABLE_PATH / "unitary_spines"
 LABEL_VERSION = 1412
@@ -292,8 +292,13 @@ def build_unitary_training_spines(as_of: datetime) -> pl.DataFrame:
     )
     root_ids = labeled["root_id"].unique().to_list()
     cells = Tables["unitary_label_cells"].collect().select("root_id", "cell_type")
+    # NOTE: this cutoff is before the unitary predictions, so the counts come
+    # without `spine_structures`, which reads them.
+    pre_roots = _count_inputs(_root_synapses(root_ids, as_of=as_of)).select(
+        *structure_key, "n_pre_root_ids"
+    )
     return (
-        labeled.join(structure_pre_roots(root_ids, as_of=as_of), on=structure_key, how="left")
+        labeled.join(pre_roots, on=structure_key, how="left")
         .filter(pl.col("n_pre_root_ids") >= 2)
         .join(read_structures(root_ids, as_of=as_of), on=structure_key, how="inner")
         .join(cells, on="root_id", how="left")
