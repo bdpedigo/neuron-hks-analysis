@@ -52,6 +52,10 @@ Scope labels used below:
   - Two events break the pin: a deletion of old attempts, or a move of the table to a new `p-…` path. A new path means new parameters, so that is a deliberate change.
   - A product built from deployment tables without an `as_of` is frozen, not rebuildable. For example, the full run can process the 6,010 labeled roots again. Their new attempts then win, and an unpinned P2 changes.
 - [ ] **Store frozen files in a versioned location** (git LFS, or a write-once prefix in the bucket). Now they exist only on the laptop. `git ls-files data` shows only `ctype_hues.pkl`, and the LFS rules in `data/.gitattributes` name old file paths that no longer exist.
+- **Stash small script tables with `Stash`** (`src/analysis/stash.py`), for example fold scores. Its path is `data/stash/{name}/{key}.parquet`. The key is a hash of the `cache_key` of each input table and of the params that the script passes. So a new input or param gives a new path, and a script never reads a result of old inputs. The compute code stays in the script: `if not s.exists(): s.save(...)`, then `s.load()`.
+  - Pass cached tables as inputs. A view such as `model_inputs` has no `cache_key`, so pass the cached tables that it reads.
+  - The key does not see code. After a change to the compute, bump a version param.
+  - The stash is rebuildable. Delete `data/stash/` to clear it.
 - [x] **Tooling.** If the cache of a registered table is missing, `just materialize NAME` builds it. `--force` rebuilds it. `just status` lists each registered table with its kind and cache state. It also lists the other files in the version folder: stale cache keys, interrupted builds, and files not in the registry. Product code is in `src/analysis/products/`, and the CLI is `scripts/tables.py`.
   - [ ] Add the frozen kind. The registry kinds are now `materialized`, `cached build` and `uncached`. After the frozen kind exists, `status` must never mark a frozen file as an orphan.
 
@@ -245,7 +249,7 @@ The original records of these labels are neuroglancer states or notebooks. A sta
     | synapse | `both_upweighted` | 0.964 ± 0.011 | 0.936 ± 0.058 | |
 
     The H01 rows help most on shaft (0.89 → 0.94 of shaft labels correct, neuron split). Macro F1 varies much between folds, because the retrain cohort has only 26 soma labels.
-  - The script now runs every variant in `MODEL_SPECS`, and saves the fold results of each to `data/h01_retrain/{experiment}/{variant}.parquet`. A saved result is read instead of fit again. Delete the folder after a change to the rows, the features or the forest. The neuron split is off (`RUN_NEURON_SPLIT = False`), so the HKS variants have synapse split results only. The glued variables and the per-experiment figures are for the main model. `retrain_all_models_synapse_split` shows every variant.
+  - The script now runs every variant in `MODEL_SPECS`, and stashes the fold results of each (`Stash`, see Conventions). A stashed result is read instead of fit again. After a change to `run_folds`, bump `FOLDS_VERSION`. The neuron split is off (`RUN_NEURON_SPLIT = False`), so the HKS variants have synapse split results only. The glued variables and the per-experiment figures are for the main model. `retrain_all_models_synapse_split` shows every variant.
   - Result, all variants, synapse split (mean ± standard deviation over 10 folds):
 
     | Variant | Weighted F1, MICrONS only | Weighted F1, both | Macro F1, MICrONS only | Macro F1, both | Wilcoxon p (macro F1) |

@@ -12,9 +12,9 @@ Reads only `model_inputs` (MICrONS) and `h01_retrain_model_inputs` (H01), so the
 H01 validation cohort stays held out. The nucleus mask and the forest are those
 of `train.py` (`analysis.models`).
 
-The fold results of each variant are saved to `data/h01_retrain/`, and a saved
-result is read instead of fit again. Delete that folder after a change to the
-rows, the features or the forest.
+The fold results of each variant are stashed (`analysis.Stash`) under a key of
+the input tables and the fold settings, and a stashed result is read instead of
+fit again. After a change to `run_folds`, bump `FOLDS_VERSION`.
 """
 
 import numpy as np
@@ -28,7 +28,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from tqdm.auto import tqdm
 
 from analysis import (
-    DATA_PATH,
+    Stash,
     Tables,
     save_matplotlib_figure,
     save_variables,
@@ -39,6 +39,7 @@ from analysis.models import (
     MAIN_MODEL,
     MODEL_SPECS,
     MODEL_VERSION,
+    RF_PARAMS,
     feature_columns,
     make_model,
     nucleus_masked_roots,
@@ -47,7 +48,8 @@ from analysis.models import (
 )
 
 SUBFOLDER = "h01_retrain"
-RESULTS_PATH = DATA_PATH / "h01_retrain"
+# Part of the stash key of the fold results. Bump it after a change to `run_folds`.
+FOLDS_VERSION = 1
 LABELS = ["soma", "shaft", "spine"]
 BINARY_LABELS = ["not_spine", "spine"]
 H01_SAMPLE_WEIGHT = 1000
@@ -221,12 +223,27 @@ if not RUN_NEURON_SPLIT:
 results = {}
 for experiment, (splits, train_h01_of, test_h01_of, _) in EXPERIMENTS.items():
     for name, spec in MODEL_SPECS.items():
-        path = RESULTS_PATH / experiment / f"{name}.parquet"
-        if not path.exists():
+        folds = Stash(
+            f"h01_retrain/{experiment}/{name}",
+            # The cached tables under `model_inputs` and `h01_retrain_model_inputs`.
+            inputs=[
+                Tables["labeled_synapse_features"],
+                Tables["root_nuclei"],
+                Tables["h01_labeled_synapse_features"],
+                Tables["h01_root_nuclei"],
+            ],
+            spec=spec,
+            modes=TRAIN_MODES,
+            n_splits=N_SPLITS,
+            split_seed=SPLIT_SEED,
+            h01_sample_weight=H01_SAMPLE_WEIGHT,
+            forest=RF_PARAMS,
+            version=FOLDS_VERSION,
+        )
+        if not folds.exists():
             print(f"{experiment}: {name}")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            run_folds(spec, splits, train_h01_of, test_h01_of).write_parquet(path)
-        results[experiment, name] = pl.read_parquet(path).to_pandas()
+            folds.save(run_folds(spec, splits, train_h01_of, test_h01_of))
+        results[experiment, name] = folds.load().to_pandas()
 
 all_results = pd.concat(
     [
@@ -292,16 +309,18 @@ def plot_folds(results: pd.DataFrame, held_out: str):
 
 for experiment, (*_, held_out) in EXPERIMENTS.items():
     main = results[experiment, MAIN_MODEL]
-    summary = main.groupby("train_mode")[METRIC].agg(["mean", "std"])
-    save_variables(
-        prefix=f"h01_retrain_{experiment}_",
-        **{
-            f"{mode}_{METRIC}_{stat_name}": value
-            for mode, row in summary.iterrows()
-            for stat_name, value in row.items()
-        },
-        format="{:.3f}",
-    )
+    # Weighted F1 too, the metric of the zero-shot H01 validation (Fig 6A).
+    for metric in [METRIC, "weighted_f1"]:
+        summary = main.groupby("train_mode")[metric].agg(["mean", "std"])
+        save_variables(
+            prefix=f"h01_retrain_{experiment}_",
+            **{
+                f"{mode}_{metric}_{stat_name}": value
+                for mode, row in summary.iterrows()
+                for stat_name, value in row.items()
+            },
+            format="{:.3f}",
+        )
     save_variables(
         prefix=f"h01_retrain_{experiment}_",
         wilcoxon_p=paired_test(main),

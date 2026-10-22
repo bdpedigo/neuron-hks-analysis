@@ -44,6 +44,7 @@ from .pyvista import (
 )
 from .skeleton import mask_dendrite_by_client_skeleton
 from .sources import VERSION, VERSION_TIMESTAMP
+from .stash import Stash
 from .utils import (
     cell_type_mapper,
     get_experiment_info,
@@ -113,4 +114,5 @@ __all__ = [
     "TABLE_PATH",
     "PROJECT_ROOT",
     "Tables",
+    "Stash",
 ]
