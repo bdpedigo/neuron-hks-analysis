@@ -1,12 +1,10 @@
 # %%
-"""Train the unitary-spine model (P13) on the training spines of the column run.
+"""Train the unitary-spine model (P13) on the V2 training spines.
 
 Two feature sets, both with the structure geometry: the HKS means, and every
 spectral mean (HKS, curvature, normal). Cross-validation is grouped by cell, and
-also ungrouped, which is how the paper's 0.951 was computed.
-
-NOTE: this is the trial on the s3 domains and s2 spines. It writes no glued
-variables, because the paper's `unitary_spines_*` values are not from this data.
+also ungrouped, which is how the paper's 0.951 was computed. The glued CV F1 is
+that of `MAIN_UNITARY_MODEL`, grouped by cell.
 """
 
 import time
@@ -17,8 +15,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import f1_score, make_scorer, precision_score, recall_score
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold, cross_validate
 
-from analysis import Tables
+from analysis import Tables, save_variables
 from analysis.models import (
+    MAIN_UNITARY_MODEL,
+    MODEL_VERSION,
     UNITARY_MODEL_SPECS,
     UNITARY_RF_PARAMS,
     feature_columns,
@@ -26,7 +26,6 @@ from analysis.models import (
 )
 from analysis.products.unitary_spines import UNITARY_CLASSES
 
-VERSION = "trial_s3"
 N_FOLDS = 10
 POSITIVE = UNITARY_CLASSES[1]
 
@@ -85,6 +84,21 @@ cv_results = pd.DataFrame(rows)
 with pd.option_context("display.float_format", "{:.3f}".format, "display.width", 120):
     print(cv_results.to_string(index=False))
 
+is_main_f1 = (cv_results["variant"] == MAIN_UNITARY_MODEL) & (cv_results["metric"] == "f1")
+main_f1 = cv_results[is_main_f1].set_index("cv")
+save_variables(model_n_training_spines=len(spines), format="{:,}", prefix="unitary_spines_")
+save_variables(
+    model_mean_cv_f1_score=main_f1.loc["grouped by cell", "mean"],
+    model_mean_cv_f1_score_ungrouped=main_f1.loc["ungrouped", "mean"],
+    format="{:.3f}",
+    prefix="unitary_spines_",
+)
+save_variables(
+    model_n_estimators=UNITARY_RF_PARAMS["n_estimators"],
+    model_max_depth=UNITARY_RF_PARAMS["max_depth"],
+    prefix="unitary_spines_",
+)
+
 # %% fit each variant on all spines, and save it
 
 importances = {}
@@ -93,7 +107,7 @@ for name, spec in UNITARY_MODEL_SPECS.items():
     currtime = time.time()
     model = make_unitary_model(0).fit(X, y)
     model_dir = save_model(
-        model, X, f"{name}", version=VERSION, features_product="structure_features"
+        model, X, f"{name}", version=MODEL_VERSION, features_product="structure_features"
     )
     print(f"{name}: {time.time() - currtime:.1f} s, saved to {model_dir}")
     importances[name] = pd.Series(model.feature_importances_, index=X.columns)

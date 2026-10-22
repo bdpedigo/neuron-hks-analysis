@@ -73,6 +73,8 @@ UNITARY_MODEL_SPECS = {
     "unitary_hks": dict(prefixes=HKS_PREFIXES, extra_features=UNITARY_GEOMETRY),
     "unitary_spectral": dict(prefixes=FEATURE_PREFIXES, extra_features=UNITARY_GEOMETRY),
 }
+# The glued variables use this one, and the deployment applies it.
+MAIN_UNITARY_MODEL = "unitary_hks"
 # NOTE: unlike RF_PARAMS, no class weights, as in the paper's model.
 UNITARY_RF_PARAMS = dict(max_depth=15, n_estimators=500)
 

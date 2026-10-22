@@ -4,11 +4,15 @@
 Each label is a spine of the old pipeline. Its synapses map it to the new
 structures: kept, split, merged or lost (see `products/unitary_spines.py`). The
 cells with no structures yet are listed apart.
+
+The glued shares of the hand tags are over all labels, as the paper reports the
+manual review.
 """
 
 import polars as pl
+from scipy.stats import binomtest
 
-from analysis import Tables
+from analysis import Tables, save_variables
 from analysis.products.unitary_spines import OUTCOMES, TAG_CATEGORIES
 
 pl.Config.set_tbl_rows(80)
@@ -65,3 +69,22 @@ print(not_done)
 print(f"{len(training)} training spines on {training['root_id'].n_unique()} cells")
 print(training.group_by("label").len().sort("label"))
 print(training.group_by("n_pre_root_ids").len().sort("n_pre_root_ids"))
+
+# %% glued variables: the share of each hand tag among the reviewed labels
+
+
+def format_share(count: int, n: int) -> str:
+    ci = binomtest(count, n).proportion_ci(method="wilson")
+    return (
+        rf"{count / n * 100:.0f}\% (95\% CI: {ci.low * 100:.0f}-{ci.high * 100:.0f}\%)"
+    )
+
+
+save_variables(model_sample_size=len(outcomes), format="{:,}", prefix="unitary_spines_")
+save_variables(
+    **{
+        f"{tag}_proportion": format_share(outcomes[tag].sum(), len(outcomes))
+        for tag in ["true_multi", "y", "merge"]
+    },
+    prefix="unitary_spines_",
+)

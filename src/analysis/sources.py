@@ -23,6 +23,10 @@ STEP_PINS = {
     # The hash includes the model URI, here ssa_model_full_v2.
     "domain_predictions": ("s1", "p-c6071657570ccf34"),
     "synapse_predictions": ("s1", "p-9afb050cbd359710"),
+    "vertex_structures": ("s2", "p-1404d7eee3ae17fe"),
+    "structure_morphometry": ("s2", "p-f3d682d0163596cb"),
+    "structure_features": ("s2", "p-e78df7b56789c3e0"),
+    "structure_anchors": ("s1", "p-63a99efc6ccae702"),
 }
 
 
@@ -74,6 +78,10 @@ CUTOFFS = {
     # predictions of the MICrONS and H01 test cohorts were complete at this time
     # (last data commits 2026-10-21 23:15 UTC and 21:44 UTC).
     "validation": datetime(2026, 10, 21, 23, 20, tzinfo=timezone.utc),
+    # The spine structures that train the unitary-spine model. The structures of
+    # the MICrONS test cohort were complete at this time (last data commit
+    # 2026-10-22 12:15 UTC).
+    "unitary_training": datetime(2026, 10, 22, 12, 20, tzinfo=timezone.utc),
 }
 
 
