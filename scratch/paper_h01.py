@@ -31,7 +31,7 @@ from upath import UPath
 
 from meshmash.io import read_condensed_features, read_condensed_graph, read_id_to_mesh_map
 
-from ..io import DATA_PATH, PROJECT_ROOT
+from analysis.io import DATA_PATH, PROJECT_ROOT
 
 PAPER_H01_CLOUD_PATH = UPath("gs://bdp-ssa/h01_c3_flat/absolute-solo-yak")
 PAPER_H01_PATH = DATA_PATH / "paper_h01"

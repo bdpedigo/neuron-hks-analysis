@@ -23,6 +23,10 @@ class Table:
     A table with neither is a planned table: a name and a `description` only, so
     the catalog can list it before it is built.
 
+    A frozen table has a `build` that reads only the file or folder at `frozen`.
+    That file is the only record of its data, so no code can rebuild it, and the
+    table has no cache.
+
     A table with `cache_params` is always read from its cache, which is built on
     first access. The cache is at `data/tables/{folder}/{name}/{cache_key}.parquet`,
     where `folder` defaults to `v{VERSION}`.
@@ -38,7 +42,10 @@ class Table:
         materialize: Optional[Callable[[Path], None]] = None,
         folder: Optional[str] = None,
         description: Optional[str] = None,
+        frozen: Optional[Path] = None,
     ):
+        if frozen is not None and (build is None or cache_params is not None):
+            raise ValueError(f"{name!r}: a frozen table takes a `build` and no `cache_params`")
         if build is not None and materialize is not None:
             raise ValueError(f"{name!r}: pass at most one of `build` or `materialize`")
         if build is None and materialize is None and (cache_params is not None or not description):
@@ -51,17 +58,22 @@ class Table:
         self._materialize = materialize
         self.cache_params = cache_params
         self.folder = folder or f"v{VERSION}"
+        self.frozen = frozen
 
     @cached_property
     def _plan(self) -> pl.LazyFrame:
         if self._build is None:
             raise NotImplementedError(f"{self.name!r} is planned, so it has no data yet")
+        if self.frozen is not None and not self.frozen.exists():
+            raise FileNotFoundError(f"{self.name!r} is frozen, and its file is missing: {self.frozen}")
         return self._build()
 
     @property
     def kind(self) -> str:
         if self._build is None and self._materialize is None:
             return "planned"
+        if self.frozen is not None:
+            return "frozen"
         if self._materialize is not None:
             return "materialized"
         if self.cache_params is not None:
@@ -115,7 +127,9 @@ class Table:
 
     def peek_schema(self) -> Optional[pl.Schema]:
         """The schema of the current cache, or None if it does not exist. This never
-        builds anything."""
+        builds anything, except that a frozen table reads its file."""
+        if self.frozen is not None:
+            return self.schema if self.frozen.exists() else None
         try:
             path = self.cache_path
         except UnpinnedError:
@@ -163,6 +177,7 @@ class TableRegistry:
         materialize: Optional[Callable[[Path], None]] = None,
         folder: Optional[str] = None,
         description: Optional[str] = None,
+        frozen: Optional[Path] = None,
     ) -> Table:
         table = Table(
             name,
@@ -171,6 +186,7 @@ class TableRegistry:
             materialize=materialize,
             folder=folder,
             description=description,
+            frozen=frozen,
         )
         self._tables[name] = table
         return table

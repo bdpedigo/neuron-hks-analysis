@@ -8,7 +8,7 @@ import polars as pl
 from caveclient import CAVEclient
 from pytz import utc
 
-from ..io import TABLE_PATH
+from ..io import TABLE_PATH, V1412_CELL_INFO_PATH
 from ..sources import DATASTACK, VERSION
 from .catalog import Tables, write_parquet_atomic
 
@@ -17,6 +17,8 @@ TABLE_WEIGHTS = {
     "bdp_synapse_compartment_labels": 25,
     "bdp_point_compartment_labels": 10,
 }
+# S9: the one-time export of the validation cells and their labels.
+VALIDATION_PATH = TABLE_PATH / "validation"
 
 
 def fetch_nucleus_roots(client, nucleus_ids, version=VERSION) -> pl.DataFrame:
@@ -33,11 +35,30 @@ def fetch_nucleus_roots(client, nucleus_ids, version=VERSION) -> pl.DataFrame:
     )
 
 
+Tables.register(
+    "v1412_cell_info",
+    description=(
+        "The AIBS cell info at v1412, one row per cell: nucleus ID (`id`), root ID "
+        "and cell type. CAVE no longer serves v1412, so it maps v1412 root IDs to "
+        "nucleus IDs. For the cell info at the current version, use `load_neuron_info`."
+    ),
+    build=lambda: pl.scan_csv(V1412_CELL_INFO_PATH).drop(""),
+    frozen=V1412_CELL_INFO_PATH,
+)
+
+
+Tables.register(
+    "validation_nucleus_ids",
+    description="The nucleus ID of each held-out validation cell (S9).",
+    build=lambda: pl.scan_csv(VALIDATION_PATH / "validation_ids_used.csv"),
+    frozen=VALIDATION_PATH / "validation_ids_used.csv",
+)
+
+
 def fetch_validation_cells(client, version=VERSION) -> pl.DataFrame:
     """The validation cells (S9 nucleus IDs) with their root IDs at `version`."""
-    validation_path = TABLE_PATH / "validation" / "validation_ids_used.csv"
-    nucleus_ids = pd.read_csv(validation_path)["nucleus_id"].unique()
-    return fetch_nucleus_roots(client, nucleus_ids, version=version)
+    nucleus_ids = Tables["validation_nucleus_ids"].collect()["nucleus_id"].unique()
+    return fetch_nucleus_roots(client, nucleus_ids.to_list(), version=version)
 
 
 Tables.register(
@@ -72,7 +93,7 @@ def read_validation_label_files() -> pl.DataFrame:
     """The S9 validation labels, without the root IDs stored in the files."""
     frames = []
     for label_set, file_name in VALIDATION_LABEL_FILES.items():
-        frame = pl.read_csv(TABLE_PATH / "validation" / file_name)
+        frame = pl.read_csv(VALIDATION_PATH / file_name)
         frames.append(
             frame.select(
                 pl.lit(label_set).alias("label_set"),
@@ -80,6 +101,17 @@ def read_validation_label_files() -> pl.DataFrame:
             )
         )
     return pl.concat(frames, how="diagonal")
+
+
+Tables.register(
+    "validation_label_files",
+    description=(
+        "One row per hand-labeled validation synapse (S9), from the `exc` and `inh` "
+        "label files, without the root IDs stored in the files."
+    ),
+    build=lambda: read_validation_label_files().lazy(),
+    frozen=VALIDATION_PATH,
+)
 
 
 def fetch_validation_labels(
@@ -91,7 +123,7 @@ def fetch_validation_labels(
     the post root of the synapse. They differ when an edit after the labeling
     moved the synapse off the cell, and `on_cell` is false for those rows.
     """
-    labels = read_validation_label_files()
+    labels = Tables["validation_label_files"].collect()
     synapses = client.materialize.query_table(
         "synapses_pni_2",
         filter_in_dict=dict(id=labels["synapse_id"].to_list()),

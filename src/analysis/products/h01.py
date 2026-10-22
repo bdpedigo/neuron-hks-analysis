@@ -68,10 +68,21 @@ def read_h01_annotations() -> pl.DataFrame:
     )
 
 
+Tables.register(
+    "h01_annotations",
+    description=(
+        "One row per labeled point in the exported H01 neuroglancer states (S12): "
+        "its state, cohort and root, the point in nm, and its tags."
+    ),
+    build=lambda: read_h01_annotations().lazy(),
+    frozen=H01_TABLE_PATH,
+)
+
+
 def fetch_h01_candidate_roots() -> pl.DataFrame:
     """The roots to snapshot and run: at v1054, the state roots themselves."""
     roots = (
-        read_h01_annotations()
+        Tables["h01_annotations"].collect()
         .group_by("state_root_id", "cohort", "state_id")
         .agg(n_points=pl.len())
         .rename({"state_root_id": "root_id"})
@@ -163,7 +174,7 @@ Tables.register(
     ),
     materialize=lambda path: write_parquet_atomic(
         fetch_h01_labels(
-            read_h01_annotations(),
+            Tables["h01_annotations"].collect(),
             Tables["h01_candidate_roots"].collect()["root_id"].to_list(),
         ),
         path,

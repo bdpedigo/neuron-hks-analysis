@@ -24,7 +24,7 @@ import polars as pl
 from analysis import Tables
 from analysis.io import FIG_PATH
 from analysis.models import load_ssa_model, predict
-from analysis.products.paper_h01 import load_paper_root, paper_vertex_posteriors
+from paper_h01 import load_paper_root, paper_vertex_posteriors
 from analysis.products.root_cache import cached
 from analysis.products.roots import NO_DOMAIN, domain_frame, load_root_cell
 from analysis.sources import H01_DATASTACK

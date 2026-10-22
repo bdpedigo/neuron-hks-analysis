@@ -28,6 +28,13 @@ def _size(path: Path) -> int:
     return path.stat().st_size
 
 
+def _frozen_state(table) -> tuple[str, str]:
+    """Whether the file of a frozen table is present, and its size."""
+    if not table.frozen.exists():
+        return "missing", ""
+    return "present", humanize.naturalsize(_size(table.frozen))
+
+
 def materialize(name: str, force: bool) -> None:
     try:
         table = Tables[name]
@@ -59,6 +66,9 @@ def status() -> None:
     current = set()
     for name in Tables:
         table = Tables[name]
+        if table.frozen is not None:
+            rows.append((name, table.kind, *_frozen_state(table)))
+            continue
         try:
             path = table.cache_path
         except UnpinnedError:
@@ -100,8 +110,12 @@ def status() -> None:
         for label, path in others:
             print(f"  {label:<16}{path.relative_to(version_dir)}  ({humanize.naturalsize(_size(path))})")
 
+    # The folders of frozen tables are not caches, so they are not listed here.
+    frozen = {Tables[name].frozen for name in Tables if Tables[name].frozen is not None}
     other_versions = sorted(
-        p.name for p in TABLE_PATH.iterdir() if p.is_dir() and p != version_dir
+        p.name
+        for p in TABLE_PATH.iterdir()
+        if p.is_dir() and p != version_dir and p not in frozen
     )
     if other_versions:
         print(f"\nOther folders in {TABLE_PATH}: {', '.join(other_versions)}")
@@ -130,6 +144,8 @@ nav a { color: inherit; margin-right: 12px; font: 13px ui-monospace, Menlo, mono
 
 def _cache_state(table) -> tuple[str, str]:
     """The cache state of `table` and its row count, without building anything."""
+    if table.frozen is not None:
+        return _frozen_state(table)
     try:
         path = table.cache_path
     except UnpinnedError:
@@ -171,7 +187,8 @@ def _code(text: str) -> str:
 def catalog(out: Path) -> None:
     tables = [Tables[name] for name in Tables if Tables[name].kind != "uncached"]
     sections = {
-        "Built tables": [t for t in tables if t.kind != "planned"],
+        "Built tables": [t for t in tables if t.kind not in ("planned", "frozen")],
+        "Frozen tables": [t for t in tables if t.kind == "frozen"],
         "Planned tables": [t for t in tables if t.kind == "planned"],
     }
     missing = [t.name for t in tables if not t.description]
@@ -180,7 +197,8 @@ def catalog(out: Path) -> None:
     body = [
         "<h1>Table catalog</h1>",
         f'<div class="meta">Generated {time.strftime("%Y-%m-%d %H:%M")} by '
-        "<code>just catalog</code>. A schema shows the current cache only. Columns that "
+        "<code>just catalog</code>. A schema shows the current cache, or the file of a "
+        "frozen table. Columns that "
         "differ only in an index or in x/y/z are one row.</div>",
     ]
     for title, section in sections.items():

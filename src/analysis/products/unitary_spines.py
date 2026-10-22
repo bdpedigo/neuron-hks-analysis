@@ -19,7 +19,7 @@ import polars as pl
 from caveclient import CAVEclient
 from nglui.parser import StateParser
 
-from ..io import TABLE_PATH, V1412_CELL_INFO_PATH
+from ..io import TABLE_PATH
 from ..sources import DATASTACK, VERSION, cutoff, pin_params
 from .catalog import Tables, write_parquet_atomic
 from .labels import fetch_nucleus_roots
@@ -61,18 +61,45 @@ def read_unitary_annotations() -> pl.DataFrame:
     )
 
 
+Tables.register(
+    "unitary_annotations",
+    description=(
+        "One row per hand-tagged putative multi-input spine in the exported "
+        "neuroglancer states (S11): its state, the v1412 root and old `component_id`, "
+        "and its tags."
+    ),
+    build=lambda: read_unitary_annotations().lazy(),
+    frozen=UNITARY_TABLE_PATH,
+)
+
+Tables.register(
+    "old_synapse_components",
+    description=(
+        "The old pipeline's map from synapse (`index`) to spine (`component_id`) "
+        "on each v1412 `post_pt_root_id`. The old pipeline is gone, so this copy is "
+        "the only link from the old spine IDs to synapse IDs."
+    ),
+    build=lambda: pl.scan_delta(str(OLD_COMPONENT_PATH)),
+    frozen=OLD_COMPONENT_PATH,
+)
+
+
 def fetch_unitary_label_cells(client, version=VERSION) -> pl.DataFrame:
     """The label cells: v1412 root -> nucleus ID -> root ID at `version`."""
-    label_roots = read_unitary_annotations()["label_root_id"].unique().to_list()
-    cell_info = pd.read_csv(V1412_CELL_INFO_PATH, usecols=["id", "pt_root_id", "cell_type"])
-    cell_info = cell_info[cell_info["pt_root_id"].isin(label_roots)]
-    assert cell_info["pt_root_id"].is_unique, "a label root has more than one nucleus"
-    assert len(cell_info) == len(label_roots), "a label root has no nucleus at v1412"
-    cells = pl.from_pandas(
-        cell_info.rename(
-            columns={"id": "nucleus_id", "pt_root_id": "label_root_id"}
+    label_roots = Tables["unitary_annotations"].collect()["label_root_id"].unique()
+    cells = (
+        Tables["v1412_cell_info"]
+        .lazy()
+        .select(
+            pl.col("id").alias("nucleus_id"),
+            pl.col("pt_root_id").alias("label_root_id"),
+            "cell_type",
         )
+        .filter(pl.col("label_root_id").is_in(label_roots.implode()))
+        .collect()
     )
+    assert cells["label_root_id"].is_unique().all(), "a label root has more than one nucleus"
+    assert len(cells) == len(label_roots), "a label root has no nucleus at v1412"
     roots = fetch_nucleus_roots(client, cells["nucleus_id"].to_list(), version=version)
     return cells.join(roots, on="nucleus_id", how="left").sort("label_root_id")
 
@@ -92,10 +119,10 @@ Tables.register(
 
 def build_unitary_label_synapses() -> pl.DataFrame:
     """The synapse IDs on each labeled spine, from the old synapse -> spine map."""
-    annotations = read_unitary_annotations()
+    annotations = Tables["unitary_annotations"].collect()
     keys = annotations.select("label_root_id", "component_id").unique()
     return (
-        pl.scan_delta(str(OLD_COMPONENT_PATH))
+        Tables["old_synapse_components"].lazy()
         .filter(pl.col("post_pt_root_id").is_in(keys["label_root_id"].implode()))
         .select(
             pl.col("index").alias("synapse_id"),
@@ -163,7 +190,7 @@ def build_unitary_label_outcomes(as_of: datetime) -> pl.DataFrame:
         .agg(pl.struct(label_key).n_unique().alias("n_labels_on_structure"))
     )
     outcomes = (
-        read_unitary_annotations()
+        Tables["unitary_annotations"].collect()
         .join(per_label, on=label_key, how="left")
         .join(cells, on="label_root_id", how="left", suffix="_cell")
         .with_columns(
@@ -191,7 +218,7 @@ def build_unitary_label_outcomes(as_of: datetime) -> pl.DataFrame:
             .alias("structure_id")
         )
     )
-    assert len(outcomes) == len(read_unitary_annotations())
+    assert len(outcomes) == len(Tables["unitary_annotations"].collect())
     return outcomes.sort(label_key)
 
 
