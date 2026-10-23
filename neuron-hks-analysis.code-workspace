@@ -14,6 +14,9 @@
 		},
 		{
 			"path": "../../ssa-backlog"
+		},
+		{
+			"path": "../../cistern"
 		}
 	],
 	"settings": {}
