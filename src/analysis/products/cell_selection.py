@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-from ..io import load_neuron_info
+from .cell_info import load_neuron_info
 from ..sources import VERSION
 from .catalog import Tables, write_parquet_atomic
 

@@ -40,7 +40,7 @@ Tables.register(
     description=(
         "The AIBS cell info at v1412, one row per cell: nucleus ID (`id`), root ID "
         "and cell type. CAVE no longer serves v1412, so it maps v1412 root IDs to "
-        "nucleus IDs. For the cell info at the current version, use `load_neuron_info`."
+        "nucleus IDs. For the cell info at the current version, use `cell_info`."
     ),
     build=lambda: pl.scan_csv(V1412_CELL_INFO_PATH).drop(""),
     frozen=V1412_CELL_INFO_PATH,

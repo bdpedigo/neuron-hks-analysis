@@ -4,13 +4,13 @@ that the catalog can list them. Move a table to its own module when it is built.
 from .catalog import Tables
 
 Tables.register(
-    "selection_synapses",
+    "proofread_pre_synapses",
     description=(
-        "One row per synapse in the census selection: the synapses from a proofread "
-        "cell or onto a column cell. It joins the synapse table, the predicted "
-        "compartment and posteriors, the spine structure fields, the skeleton "
-        "compartments and distances, the cell types and the positions. It replaces "
-        "the old `filtered_synapses`."
+        "One row per synapse from a proofread cell, onto any root, with the columns of "
+        "`column_post_synapses`. The distance to the post nucleus comes from the "
+        "nucleus position, because most targets have no skeleton. The full synapse "
+        "scan keeps these rows as it builds `post_aggregation`. It replaces the "
+        "proofread half of the old `filtered_synapses`."
     ),
 )
 Tables.register(

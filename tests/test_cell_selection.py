@@ -1,6 +1,6 @@
 import pandas as pd
 
-from analysis.io import _as_bool
+from analysis.products.cell_info import _as_bool
 from analysis.products.cell_selection import (
     COLUMN_SOURCE,
     column_roots,

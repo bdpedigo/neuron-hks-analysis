@@ -12,9 +12,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import pyvista as pv
-from caveclient import CAVEclient
 from joblib import Parallel, delayed, load
-from standard_transform.datasets import minnie_transform_nm
 
 from .sources import VERSION
 from .utils import project_points_to_mesh
@@ -464,7 +462,7 @@ TABLE_PATH = DATA_PATH / "tables"
 FROZEN_PATH = DATA_PATH / "frozen"
 # The AIBS cell info (nucleus ID, root ID and cell type per cell) at v1412,
 # which CAVE no longer serves. It maps v1412 root IDs to nucleus IDs. For the
-# cell info at `VERSION`, use `load_neuron_info`.
+# cell info at `VERSION`, use the `cell_info` table.
 V1412_CELL_INFO_PATH = FROZEN_PATH / "minnie65_v1412_aibs_cell_info.csv.gz"
 
 
@@ -498,83 +496,3 @@ def cache_table(name: str):
         return wrapper
 
     return decorator
-
-
-def _get_client(version=VERSION):
-    return CAVEclient("minnie65_public", version=version)
-
-
-@cache_table("aibs_cell_info")
-def _fetch_aibs_cell_info(version=VERSION, **query_args):
-    client = _get_client(version=version)
-    return client.materialize.query_view("aibs_cell_info", **query_args)
-
-
-@cache_table("proofreading_status_and_strategy")
-def _fetch_proofreading_table(version=VERSION, **query_args):
-    client = _get_client(version=version)
-    return client.materialize.tables.proofreading_status_and_strategy().query(
-        **query_args
-    )
-
-
-def _as_bool(values: pd.Series) -> pd.Series:
-    """Parse a CAVE boolean column, which is `'t'`/`'f'` in old versions and
-    `True`/`False` from v1822 on. A missing value is False."""
-    return values.map({True: True, False: False, "t": True, "f": False}).eq(True)
-
-
-def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=True):
-    query_args = dict(desired_resolution=[1, 1, 1], split_positions=True)
-
-    cell_info = _fetch_aibs_cell_info(version=version, **query_args).to_pandas()
-
-    cell_info.drop_duplicates("pt_root_id", keep=False, inplace=True)
-    cell_info.set_index("pt_root_id", inplace=True)
-    cell_info["axon_cleaned"] = _as_bool(cell_info["axon_cleaned"])
-
-    if transform_positions:
-        tform = minnie_transform_nm()
-        cell_info[["pt_position_um_x", "pt_position_um_y", "pt_position_um_z"]] = (
-            tform.apply_dataframe("pt_position", cell_info)
-        )
-
-    if add_thalamic:
-        proofreading_table = _fetch_proofreading_table(
-            version=version, **query_args
-        ).to_pandas()
-
-        thalamic_table = proofreading_table[
-            ~_as_bool(proofreading_table["status_dendrite"])
-            & (proofreading_table["strategy_dendrite"] == "none")
-        ]
-        thalamic_roots = thalamic_table["pt_root_id"].unique()
-
-        root_ids = cell_info.index.unique()
-        root_ids = np.concatenate([thalamic_roots, root_ids])
-        root_ids = np.unique(root_ids)
-
-        cell_info = cell_info.reindex(root_ids)
-        cell_info.loc[thalamic_roots, "broad_type"] = "thalamic"
-        cell_info.loc[thalamic_roots, "mtype"] = "TH"
-        cell_info.loc[thalamic_roots, "cell_type"] = "TH"
-        cell_info.loc[thalamic_roots, "pt_position_y"] = 0
-        cell_info.loc[thalamic_roots, "axon_cleaned"] = True
-
-    cell_info["axon_cleaned"] = cell_info["axon_cleaned"].astype(bool)
-
-    cell_info["broad_type"] = pd.Categorical(
-        cell_info["broad_type"], categories=BROAD_TYPE_CATEGORIES, ordered=True
-    )
-
-    cell_info["cell_type"] = pd.Categorical(
-        cell_info["cell_type"], categories=CELL_TYPE_CATEGORIES, ordered=True
-    )
-
-    cell_info["mtype"] = pd.Categorical(
-        cell_info["mtype"], categories=MTYPE_CATEGORIES, ordered=True
-    )
-
-    cell_info.query("broad_type.isin(@BROAD_TYPE_CATEGORIES)", inplace=True)
-
-    return cell_info

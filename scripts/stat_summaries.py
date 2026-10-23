@@ -36,6 +36,7 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
+from analysis.products.cell_info import load_neuron_info
 from analysis.products.cell_selection import (
     COLUMN_SOURCE,
     select_cells,
@@ -48,7 +49,6 @@ from analysis import (
     DATA_PATH,
     FIG_PATH,
     VERSION,
-    load_neuron_info,
     save_matplotlib_figure,
     save_variables,
     set_matplotlib_theme,
