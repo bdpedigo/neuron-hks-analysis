@@ -1,5 +1,7 @@
 """P4: the validation labels with the HKS posteriors and the NEURD labels."""
 
+import logging
+
 import polars as pl
 from caveclient import CAVEclient
 
@@ -29,16 +31,11 @@ NEURD_LABELS = {
 }
 
 
-def fetch_neurd_labels(client, synapse_ids: list[int], version=VERSION) -> pl.DataFrame:
-    """The NEURD (S7) label of each synapse in `synapse_ids` that NEURD labeled."""
-    targets = client.materialize.query_table(
-        "synapse_target_structure",
-        filter_in_dict=dict(target_id=synapse_ids),
-        materialization_version=version,
-        log_warning=False,
-    )
+def _neurd_classes(targets: pl.DataFrame) -> pl.DataFrame:
+    """The rows `id`, `target_id`, `value` of `synapse_target_structure`, with the
+    detailed label and the class of each value."""
     return (
-        pl.from_pandas(targets[["id", "target_id", "value"]])
+        targets.select("id", "target_id", "value")
         .rename({"id": "neurd_id", "target_id": "synapse_id", "value": "neurd_value"})
         .with_columns(
             neurd_detailed_label=pl.col("neurd_value").replace_strict(
@@ -50,6 +47,114 @@ def fetch_neurd_labels(client, synapse_ids: list[int], version=VERSION) -> pl.Da
                 NEURD_LABELS, default=None, return_dtype=pl.String
             )
         )
+    )
+
+
+def fetch_neurd_labels(client, synapse_ids: list[int], version=VERSION) -> pl.DataFrame:
+    """The NEURD (S7) label of each synapse in `synapse_ids` that NEURD labeled."""
+    targets = client.materialize.query_table(
+        "synapse_target_structure",
+        filter_in_dict=dict(target_id=synapse_ids),
+        materialization_version=version,
+        log_warning=False,
+    )
+    return _neurd_classes(pl.from_pandas(targets))
+
+
+NEURD_ROOTS_PER_QUERY = 25
+
+
+class _CutWarnings(logging.Handler):
+    """Records the server warnings that say a query result was cut."""
+
+    def __init__(self):
+        super().__init__()
+        self.cut = False
+
+    def emit(self, record):
+        if "Limited query" in record.getMessage():
+            self.cut = True
+
+
+def _query_neurd_batch(client, side: str, root_ids: list[int], version: int) -> pl.DataFrame:
+    """The NEURD rows of the synapses whose `{side}_pt_root_id` is in `root_ids`,
+    with both root IDs.
+
+    A CAVE query returns at most a server-set number of rows. The server says so
+    in a warning, and the result is cut with no error. So a cut batch is split in
+    two and each half is queried again.
+    """
+    handler = _CutWarnings()
+    logger = logging.getLogger("caveclient.base")
+    logger.addHandler(handler)
+    try:
+        targets = client.materialize.tables.synapse_target_structure(
+            **{f"{side}_pt_root_id": root_ids}
+        ).query(
+            select_columns={
+                "synapse_target_structure": ["id", "target_id", "value"],
+                "synapses_pni_2": ["pre_pt_root_id", "post_pt_root_id"],
+            },
+            materialization_version=version,
+            log_warning=True,
+        )
+    finally:
+        logger.removeHandler(handler)
+    if handler.cut:
+        if len(root_ids) == 1:
+            raise RuntimeError(f"the NEURD query of root {root_ids[0]} was cut")
+        half = len(root_ids) // 2
+        return pl.concat(
+            [
+                _query_neurd_batch(client, side, root_ids[:half], version),
+                _query_neurd_batch(client, side, root_ids[half:], version),
+            ]
+        )
+    targets = pl.from_pandas(targets)
+    return pl.concat(
+        [_neurd_classes(targets), targets.select("pre_pt_root_id", "post_pt_root_id")],
+        how="horizontal",
+    )
+
+
+def fetch_root_neurd_labels(
+    client, root_ids: list[int], side: str, version=VERSION
+) -> pl.DataFrame:
+    """The NEURD label of each synapse that NEURD labeled whose `{side}_pt_root_id`
+    is in `root_ids`, with `pre_pt_root_id` and `post_pt_root_id`.
+
+    `synapse_target_structure` is a reference table on `synapses_pni_2`, so the
+    filter on a root goes through the table interface, which joins the two. A root
+    that NEURD did not label has no rows.
+    """
+    return pl.concat(
+        [
+            _query_neurd_batch(client, side, root_ids[start : start + NEURD_ROOTS_PER_QUERY], version)
+            for start in range(0, len(root_ids), NEURD_ROOTS_PER_QUERY)
+        ]
+    )
+
+
+def fetch_census_neurd_labels(client, version=VERSION) -> pl.DataFrame:
+    """The NEURD label of each synapse onto a column cell or from a proofread cell,
+    one row per synapse, with the flags `on_column` and `from_proofread`."""
+    selection = Tables["cell_selection"].collect()
+    column = selection.filter(pl.col("is_column"))["pt_root_id"].to_list()
+    proofread = selection.filter(pl.col("is_proofread"))["pt_root_id"].to_list()
+    neurd = pl.concat(
+        [
+            fetch_root_neurd_labels(client, column, "post", version),
+            fetch_root_neurd_labels(client, proofread, "pre", version),
+        ]
+    )
+    # A synapse from a proofread cell onto a column cell is in both pulls.
+    return (
+        neurd.unique("synapse_id")
+        .with_columns(
+            on_column=pl.col("post_pt_root_id").is_in(column),
+            from_proofread=pl.col("pre_pt_root_id").is_in(proofread),
+        )
+        .sort("synapse_id")
     )
 
 
@@ -70,6 +175,29 @@ Tables.register(
     cache_params=lambda: {
         "version": VERSION,
         "validation_labels": Tables["validation_labels"].cache_key,
+    },
+)
+
+
+# NOTE: the census tables read the deployment at a cutoff, but NEURD is a CAVE
+# table, so this table reads it at `VERSION`. It pulls from CAVE until the NEURD
+# delta export exists (ssa-backlog TASK-39).
+Tables.register(
+    "census_neurd_labels",
+    description=(
+        "The NEURD label of each synapse onto a column cell or from a proofread "
+        "cell that NEURD labeled, one row per synapse, from the CAVE table "
+        "`synapse_target_structure`. These are the synapses of `column_post_synapses` "
+        "and `proofread_pre_synapses`, with autapses. Join on `synapse_id`. "
+        "`on_column` and `from_proofread` say which side holds the synapse. "
+        "`neurd_label` is null for the axon labels."
+    ),
+    materialize=lambda path: write_parquet_atomic(
+        fetch_census_neurd_labels(CAVEclient(DATASTACK)), path
+    ),
+    cache_params=lambda: {
+        "version": VERSION,
+        "cell_selection": Tables["cell_selection"].cache_key,
     },
 )
 
