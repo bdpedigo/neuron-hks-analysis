@@ -194,6 +194,41 @@ def spine_structures(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
     return _read_synapse_structure(root_ids, as_of=as_of)[1]
 
 
+def _join_spines(structures: pl.DataFrame, spines: pl.DataFrame) -> pl.DataFrame:
+    """`structures` (from `read_structures`) joined to `spines` (from
+    `spine_structures`) on (`root_id`, `structure_id`).
+
+    Both have `n_synapses`. The one from `spines` stays, because it comes from the
+    same synapse read as `n_pre_root_ids`.
+    """
+    key = ["root_id", "structure_id"]
+    joined = structures.join(spines, on=key, how="full", coalesce=True, suffix="_spines")
+    assert len(joined) == len(structures), (
+        "spine_structures holds a structure with no morphometry"
+    )
+    both = joined.drop_nulls(["n_synapses", "n_synapses_spines"])
+    assert (both["n_synapses"] == both["n_synapses_spines"]).all(), (
+        "structure_morphometry and the synapse table count different synapses"
+    )
+    return (
+        joined.drop("n_synapses")
+        .rename({"n_synapses_spines": "n_synapses"})
+        .sort(key)
+    )
+
+
+def read_spines(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
+    """One row per spine structure of the post roots `root_ids` at `as_of`, keyed
+    by (`root_id`, `structure_id`): the morphometry and spectral features of
+    `read_structures`, and the columns of `spine_structures`.
+
+    A table of spines on other roots is another call on those roots.
+    """
+    return _join_spines(
+        read_structures(root_ids, as_of=as_of), spine_structures(root_ids, as_of=as_of)
+    )
+
+
 def synapse_structure(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
     """One row per synapse in the synapse table (v1822) onto the post roots
     `root_ids`, with `synapse_id`, `root_id`, `pre_pt_root_id`, the `structure_id`

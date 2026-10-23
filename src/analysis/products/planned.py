@@ -23,14 +23,6 @@ Tables.register(
     ),
 )
 Tables.register(
-    "column_spines",
-    description=(
-        "One row per spine structure on a column cell, with its morphometry, its "
-        "multi-input fields and the prediction of the single-spine model. It replaces "
-        "the old `filtered_spine_info`."
-    ),
-)
-Tables.register(
     "multi_spine_annotations",
     description=(
         "One row per hand-checked multi-input spine annotation on the column cells, "
