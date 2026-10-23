@@ -127,7 +127,11 @@ def _size_legend(ax, title, loc, bbox_to_anchor, legend_sizes, size_norm):
         for s in legend_sizes
     ]
     ax.legend(
-        handles=handles, title=title, loc=loc, frameon=True, bbox_to_anchor=bbox_to_anchor
+        handles=handles,
+        title=title,
+        loc=loc,
+        frameon=True,
+        bbox_to_anchor=bbox_to_anchor,
     )
 
 

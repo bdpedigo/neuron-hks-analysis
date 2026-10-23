@@ -65,9 +65,16 @@ data = column_cells.dropna(subset=[x]).query(f"{x} > 0")
 sns.histplot(data=data, x=x, ax=ax, log_scale=True, bins=21, **histplot_kws)
 for xpos, label, ha in [(0.1, "Inhibitory", "left"), (0.9, "Excitatory", "right")]:
     ax.text(
-        xpos, 0.8, label, transform=ax.transAxes, color=CELL_TYPE_PALETTE[label.lower()], ha=ha
+        xpos,
+        0.8,
+        label,
+        transform=ax.transAxes,
+        color=CELL_TYPE_PALETTE[label.lower()],
+        ha=ha,
     )
-ax.set(ylabel="Normalized\ncell density", yticks=[], xlabel="Number of synapses on spines")
+ax.set(
+    ylabel="Normalized\ncell density", yticks=[], xlabel="Number of synapses on spines"
+)
 ax.spines[["top", "right", "left"]].set_visible(False)
 save_variables(
     prefix="column_summary_n_spine_",
@@ -79,7 +86,11 @@ ax = axs[1]
 x = "post_p_spine_synapse"
 data = column_cells.dropna(subset=[x])
 sns.histplot(data=data, x=x, ax=ax, bins=np.linspace(0, 1, 21), **histplot_kws)
-ax.set(ylabel="Normalized\ncell density", yticks=[], xlabel="Proportion of synapses on spines")
+ax.set(
+    ylabel="Normalized\ncell density",
+    yticks=[],
+    xlabel="Proportion of synapses on spines",
+)
 ax.spines[["top", "right", "left"]].set_visible(False)
 save_matplotlib_figure(fig, "spine_histograms", out_path)
 save_variables(
@@ -118,7 +129,9 @@ pair_counts = (
     .group_by("pre_cell_type", "post_cell_type", "tag")
     .len("synapse_count")
     .with_columns(
-        total_count=pl.col("synapse_count").sum().over("pre_cell_type", "post_cell_type")
+        total_count=pl.col("synapse_count")
+        .sum()
+        .over("pre_cell_type", "post_cell_type")
     )
     .with_columns(synapse_proportion=pl.col("synapse_count") / pl.col("total_count"))
     .collect()
@@ -139,7 +152,9 @@ outer_gs = GridSpec(
     hspace=0.07,
     figure=fig,
 )
-bracket_kws = dict(axis_off=True, normalize_limits=True, text_kws={"fontsize": label_fontsize})
+bracket_kws = dict(
+    axis_off=True, normalize_limits=True, text_kws={"fontsize": label_fontsize}
+)
 x_shift = -2.7
 ax = fig.add_subplot(outer_gs[1, 0])
 draw_bracket(ax, 0, 1, axis="y", label="Excitatory", shift=x_shift, **bracket_kws)
@@ -170,7 +185,9 @@ blocks = {
 }
 axs = np.empty((n_exc + n_inh, n_exc + n_inh), dtype=object)
 for (i0, j0), (n_rows, n_cols, spec) in blocks.items():
-    gs = GridSpecFromSubplotSpec(n_rows, n_cols, subplot_spec=spec, wspace=space, hspace=space)
+    gs = GridSpecFromSubplotSpec(
+        n_rows, n_cols, subplot_spec=spec, wspace=space, hspace=space
+    )
     for i in range(n_rows):
         for j in range(n_cols):
             axs[i0 + i, j0 + j] = fig.add_subplot(gs[i, j])
@@ -190,7 +207,9 @@ for i, pre_type in enumerate(plot_categories):
         start = 0.0
         for tag, color in zip(TAG_CATEGORIES, tag_colors):
             amount = props.get(tag, 0.0)
-            ax.add_patch(Rectangle(xy=(start, 0.0), width=amount, height=1.0, color=color))
+            ax.add_patch(
+                Rectangle(xy=(start, 0.0), width=amount, height=1.0, color=color)
+            )
             start += amount
         ax.spines[["left", "right", "top", "bottom"]].set_visible(True)
         ax.spines[["left", "right", "top", "bottom"]].set_linewidth(1.0)

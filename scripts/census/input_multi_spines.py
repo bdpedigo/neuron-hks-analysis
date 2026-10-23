@@ -47,14 +47,23 @@ column_cells = add_cell_type_y(
 # %% THE SPINES OF THE EXCITATORY COLUMN CELLS
 # One row per spine, with its volume, `is_multi`, the mean distance of its synapses
 # to the soma, and whether a proofread excitatory or thalamic axon targets it.
-spine_inputs = [Tables["column_post_synapses"], Tables["column_spines"], Tables["cell_selection"]]
+spine_inputs = [
+    Tables["column_post_synapses"],
+    Tables["column_spines"],
+    Tables["cell_selection"],
+]
 spines_stash = Stash("census/excitatory_column_spines", inputs=spine_inputs)
 if not spines_stash.exists():
     proofread_ids = (
-        Tables["cell_selection"].lazy().filter(pl.col("is_proofread")).select("pt_root_id")
+        Tables["cell_selection"]
+        .lazy()
+        .filter(pl.col("is_proofread"))
+        .select("pt_root_id")
     )
     pre_type = pl.col("pre_broad_type")
-    from_proofread = pl.col("pre_pt_root_id").is_in(proofread_ids.collect()["pt_root_id"])
+    from_proofread = pl.col("pre_pt_root_id").is_in(
+        proofread_ids.collect()["pt_root_id"]
+    )
     spine_synapses = (
         Tables["column_post_synapses"]
         .lazy()
@@ -69,7 +78,9 @@ if not spines_stash.exists():
             (pl.col("post_euc_distance_to_nuc").mean() / 1000).alias(
                 "post_euc_distance_to_nuc_um"
             ),
-            (from_proofread & (pre_type == "excitatory")).any().alias("from_excitatory"),
+            (from_proofread & (pre_type == "excitatory"))
+            .any()
+            .alias("from_excitatory"),
             (from_proofread & (pre_type == "thalamic")).any().alias("from_thalamic"),
         )
     )
@@ -109,7 +120,9 @@ save_variables(format="{:.1f}%", prefix=f"column_summary_{x}_", **means.to_dict(
 save_variables(
     format="{:.1f}%",
     prefix=f"column_summary_{x}_",
-    **weighted_means(column_cells.dropna(subset=[x]), "broad_type", x, weight_x).to_dict(),
+    **weighted_means(
+        column_cells.dropna(subset=[x]), "broad_type", x, weight_x
+    ).to_dict(),
 )
 
 p_23P = column_cells.query("cell_type == '23P'")[x]
@@ -158,7 +171,13 @@ for ypos, label, tag in [
     (0.1, "Single-\ninput\nspines", "single_spine"),
     (0.85, "Multi-\ninput\nspines", "multi_spine"),
 ]:
-    ax.text(0.3, ypos, label, transform=ax.transAxes, color=COMPARTMENT_PALETTE_MUTED_HEX[tag])
+    ax.text(
+        0.3,
+        ypos,
+        label,
+        transform=ax.transAxes,
+        color=COMPARTMENT_PALETTE_MUTED_HEX[tag],
+    )
 ax = axs[1]
 sns.lineplot(
     data=spines,
@@ -228,14 +247,22 @@ ax.set(
     xlabel="Normalized\ndensity\n(spines)",
 )
 ax.spines["bottom"].set_visible(False)
-ax.text(0.2, 0.8, "Thalamic", transform=ax.transAxes, color=CELL_TYPE_PALETTE["thalamic"])
 ax.text(
-    0.2, 0.15, "Local\nexcitatory", transform=ax.transAxes, color=CELL_TYPE_PALETTE["excitatory"]
+    0.2, 0.8, "Thalamic", transform=ax.transAxes, color=CELL_TYPE_PALETTE["thalamic"]
+)
+ax.text(
+    0.2,
+    0.15,
+    "Local\nexcitatory",
+    transform=ax.transAxes,
+    color=CELL_TYPE_PALETTE["excitatory"],
 )
 axs[1].set(xlabel="Proportion of\nspines with\nmultiple inputs", ylim=(5e6, 1e9))
 save_matplotlib_figure(fig, "exc_vs_th_size_by_multi_rotated", out_path, pad_inches=0.2)
 for broad_type, (_, _, group) in groups.items():
-    print(f"{broad_type}: {len(group):,} targeted spines, p_multi {group['is_multi'].mean():.3f}")
+    print(
+        f"{broad_type}: {len(group):,} targeted spines, p_multi {group['is_multi'].mean():.3f}"
+    )
 
 # %% S7: OBSERVED AND NULL PROPORTION OF MULTI-INPUT SPINE SYNAPSES OF 23P CELLS
 # The null shuffles `tag_detailed` among the spine synapses of the same size bin.
@@ -255,13 +282,18 @@ synapses_23P["shuffled_tag_detailed"] = synapses_23P.groupby(size_bin, observed=
 
 def p_multi(tag_col: str) -> pd.Series:
     return (
-        synapses_23P[tag_col].eq("multi_spine").groupby(synapses_23P["post_pt_root_id"]).mean()
+        synapses_23P[tag_col]
+        .eq("multi_spine")
+        .groupby(synapses_23P["post_pt_root_id"])
+        .mean()
     )
 
 
 bins = np.geomspace(0.03, 0.3, 40)
 fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-sns.histplot(x=p_multi("tag_detailed"), ax=ax, bins=bins, label="Observed", color="black")
+sns.histplot(
+    x=p_multi("tag_detailed"), ax=ax, bins=bins, label="Observed", color="black"
+)
 sns.histplot(
     x=p_multi("shuffled_tag_detailed"),
     ax=ax,
