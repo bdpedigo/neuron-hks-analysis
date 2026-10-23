@@ -9,12 +9,12 @@ Scripts and aggregated data associated with [Pedigo et al. 2026 - A quantitative
   ```git clone https://github.com/bdpedigo/neuron-hks.git```
 
 - Make sure you have [`uv`](https://docs.astral.sh/uv/) installed on your system for dependency management. Note that this does not preclude the use of `pip` if you prefer, but I have had better luck with reproducibility and simplicity using `uv`, so these instructions assume `uv`.
-- Currently there is only one mega-script in `./scripts`. Running it will generate many figure panels and save output variables. To run, do:
+- The census figure panels and output variables come from the scripts in `./scripts/census/`, one per figure group. For example:
 
-    ```uv run ./scripts/stat_summaries.py```
+    ```uv run ./scripts/census/input_compartments.py```
 
-- At last run, this script took about 7.5 minutes to run on my MacBook Pro laptop.
-- The code uses Python 3.12 and should run on Mac, Linux, or Windows - I have tested this using a GitHub Actions worklow, but let me know if you run into any issues.
+- These scripts read registered tables (`just status` lists them, and `just materialize NAME` builds one). A release mode that runs them from published tables alone is in progress.
+- The code uses Python 3.12 and should run on Mac, Linux, or Windows.
 
 ## Notes
 - This script starts from some intermediate aggregate tables about cell inputs and outputs, as well as a selected synapse table (inputs and outputs to curated cells) with additional information attached. Generating these tables required access to some large cloud storage tables that we currently don't have a mechanism of sharing, but are working on.

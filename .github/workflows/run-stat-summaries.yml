@@ -1,13 +1,15 @@
+# Off: this ran scripts/stat_summaries.py, which scripts/census/ replaced. The census
+# scripts read the local table caches, so they cannot run here yet. TASK-41 runs them
+# again from the published tables (release mode, TASK-26). Until then, the workflow
+# has no trigger.
 name: Run stat summaries
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
   run:
+    if: false
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
