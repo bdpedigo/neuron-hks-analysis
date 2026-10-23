@@ -1,4 +1,5 @@
-"""The census tables on the column cells."""
+"""The census tables on the column cells and the proofread cells, and the per-root
+aggregations of their synapses."""
 
 from datetime import datetime
 
@@ -254,5 +255,129 @@ Tables.register(
             )
         },
         **pin_params(*SPINE_PRODUCTS, *DOMAIN_PRODUCTS, as_of=cutoff("test_census")),
+    },
+)
+
+
+KNOWN_TAGS = ["spine", "shaft", "soma"]
+DETAILED_SPINE_TAGS = ["single_spine", "multi_spine"]
+
+
+def _aggregation_exprs() -> list[pl.Expr]:
+    """The counts and mean sizes per group, from the old `agg_exprs` in
+    `meshrep/tools/make_mega_tables.py`.
+
+    A known synapse has a `tag` of spine, shaft or soma. A spine site is a distinct
+    (`post_pt_root_id`, `structure_id`) pair with at least one spine-tagged
+    synapse. The old pre side counted distinct structure IDs, so the spines on two
+    post roots with the same ID counted as one site.
+    """
+    tag, detailed = pl.col("tag"), pl.col("tag_detailed")
+    site = pl.struct("post_pt_root_id", "structure_id")
+    on_site = (tag == "spine") & pl.col("structure_id").is_not_null()
+    return [
+        pl.len().alias("total_synapses"),
+        tag.is_in(KNOWN_TAGS).sum().alias("total_known_synapses"),
+        *[(tag == t).sum().alias(f"{t}_synapses") for t in KNOWN_TAGS],
+        *[(detailed == t).sum().alias(f"{t}_synapses") for t in DETAILED_SPINE_TAGS],
+        site.filter(on_site).n_unique().alias("spine_sites"),
+        site.filter(on_site & (detailed == "multi_spine")).n_unique().alias("multi_spine_sites"),
+        pl.col("size").mean().alias("mean_synapse_size"),
+        *[pl.col("size").filter(tag == t).mean().alias(f"mean_{t}_size") for t in KNOWN_TAGS],
+        *[
+            pl.col("size").filter(detailed == t).mean().alias(f"mean_{t}_size")
+            for t in DETAILED_SPINE_TAGS
+        ],
+    ]
+
+
+def _ratio(numerator: str, denominator: str) -> pl.Expr:
+    return pl.col(numerator) / pl.col(denominator)
+
+
+def _aggregate(synapses: pl.LazyFrame, by: str, prefix: str) -> pl.LazyFrame:
+    """One row per value of `by`, with the counts, proportions and mean sizes of
+    its synapses. Each column but `by` takes `prefix`."""
+    return (
+        synapses.group_by(by)
+        .agg(_aggregation_exprs())
+        .with_columns(
+            unknown_synapses=pl.col("total_synapses") - pl.col("total_known_synapses"),
+        )
+        .with_columns(
+            spine_shaft_ratio=_ratio("spine_synapses", "shaft_synapses"),
+            p_spine_synapse=_ratio("spine_synapses", "total_known_synapses"),
+            p_shaft_synapse=_ratio("shaft_synapses", "total_known_synapses"),
+            p_soma_synapse=_ratio("soma_synapses", "total_known_synapses"),
+            p_unknown_synapse=_ratio("unknown_synapses", "total_synapses"),
+            p_single_spine_synapse=_ratio("single_spine_synapses", "total_known_synapses"),
+            p_multi_spine_synapse=_ratio("multi_spine_synapses", "total_known_synapses"),
+            p_spine_synapse_is_multi=_ratio("multi_spine_synapses", "spine_synapses"),
+            p_spine_site_is_multi=_ratio("multi_spine_sites", "spine_sites"),
+            mean_multi_spine_inputs=_ratio("multi_spine_synapses", "multi_spine_sites"),
+            mean_spine_inputs=_ratio("spine_synapses", "spine_sites"),
+        )
+        .rename(lambda name: name if name == by else f"{prefix}{name}")
+        .sort(by)
+    )
+
+
+def aggregate_post(synapses: pl.LazyFrame) -> pl.LazyFrame:
+    """One row per post root of `synapses`, with `post_*` counts, proportions and
+    mean sizes. See `_aggregation_exprs`. The caller picks the synapses."""
+    return _aggregate(synapses, "post_pt_root_id", "post_")
+
+
+def aggregate_pre(synapses: pl.LazyFrame) -> pl.LazyFrame:
+    """One row per pre root of `synapses`, with the `post_*` columns of
+    `aggregate_post` as `pre_*` for all targets, and as `pre_to_exc_*` for the
+    excitatory targets (`post_broad_type`). The `pre_to_exc_*` columns are null for
+    a pre root with no excitatory target."""
+    to_exc = _aggregate(
+        synapses.filter(pl.col("post_broad_type") == "excitatory"), "pre_pt_root_id", "pre_to_exc_"
+    )
+    return (
+        _aggregate(synapses, "pre_pt_root_id", "pre_")
+        .join(to_exc, on="pre_pt_root_id", how="left")
+        .sort("pre_pt_root_id")
+    )
+
+
+def build_proofread_cell_info() -> pl.LazyFrame:
+    proofread = Tables["cell_selection"].lazy().filter(pl.col("is_proofread"))
+    post = aggregate_post(Tables["column_post_synapses"].lazy()).rename(
+        {"post_pt_root_id": "pt_root_id"}
+    )
+    return (
+        Tables["cell_info"]
+        .lazy()
+        .join(proofread, on="pt_root_id", how="inner")
+        .join(post, on="pt_root_id", how="left")
+        .sort("pt_root_id")
+    )
+
+
+# NOTE: a test-cohort version. Only the column cells have `post_*` data, because
+# `column_post_synapses` holds only the synapses onto the column cells. TASK-19
+# rebuilds this table at the full-run pins, and adds the `pre_*` columns from
+# `aggregate_pre` on `proofread_pre_synapses` (TASK-18).
+Tables.register(
+    "proofread_cell_info",
+    description=(
+        "Test-cohort version. One row per proofread cell (`is_proofread` in "
+        "`cell_selection`, the thalamic cells too): the columns of `cell_info`, the "
+        "`cell_selection` flags, and the `post_*` counts and proportions of "
+        "`aggregate_post` on `column_post_synapses`. Only the column cells have "
+        "`post_*` data, and the other rows have nulls. It has no `pre_*` columns yet. "
+        "TASK-19 rebuilds it at the full-run pins and adds them. It replaces the old "
+        "`proofread_info` of `stat_summaries.py`."
+    ),
+    build=build_proofread_cell_info,
+    cache_params=lambda: {
+        "version": VERSION,
+        **{
+            name: Tables[name].cache_key
+            for name in ("cell_info", "cell_selection", "column_post_synapses")
+        },
     },
 )
