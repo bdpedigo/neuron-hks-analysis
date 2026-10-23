@@ -36,7 +36,6 @@ from ..sources import (
     H01_DATASTACK,
     H01_SYNAPSES_PATH,
     MICRONS_SYNAPSE_RESOLUTION,
-    MICRONS_SYNAPSES_PATH,
     cutoff,
     deployment_path,
     pin_params,
@@ -44,16 +43,20 @@ from ..sources import (
 from .catalog import Tables
 from .deployment import delta_table, latest_attempts, scan_roots
 from .features import add_distance_to_nucleus
+from .synapses import scan_post_synapses
 
 # The sources and local tables of each datastack.
-# - `synapse_resolution`: nm per unit of the synapse positions in `synapses_path`.
+# - `scan_synapses`: the synapse rows onto a list of post roots.
+# - `synapse_resolution`: nm per unit of the synapse positions in `scan_synapses`.
 # - `label_tables`: the local tables with manual labels, each with its label
 #   column. A table's `root_id` is the cell the label belongs to.
 # - `held_out_cohort`: the `cohort` of `cells_table` that model work must not look
 #   at, or None.
 ROOT_SOURCES = {
     H01_DATASTACK: dict(
-        synapses_path=H01_SYNAPSES_PATH,
+        scan_synapses=lambda root_ids: pl.scan_delta(delta_table(str(H01_SYNAPSES_PATH))).filter(
+            pl.col("post_pt_root_id").is_in(root_ids)
+        ),
         # NOTE: the snapshot stores positions in nm.
         synapse_resolution=(1.0, 1.0, 1.0),
         nuclei_table="h01_root_nuclei",
@@ -62,7 +65,7 @@ ROOT_SOURCES = {
         held_out_cohort="validation",
     ),
     DATASTACK: dict(
-        synapses_path=MICRONS_SYNAPSES_PATH,
+        scan_synapses=scan_post_synapses,
         synapse_resolution=MICRONS_SYNAPSE_RESOLUTION,
         nuclei_table="root_nuclei",
         # The training labels and the labels of the 132 validation cells.
@@ -171,8 +174,7 @@ def fetch_root_synapses(root_id: int, datastack: str) -> pl.DataFrame:
     the rows that the deployment's `synapse_mapping` mapped."""
     source = ROOT_SOURCES[datastack]
     return (
-        pl.scan_delta(delta_table(str(source["synapses_path"])))
-        .filter(pl.col("post_pt_root_id") == root_id)
+        source["scan_synapses"]([root_id])
         .select(
             pl.col("id").alias("synapse_id"),
             *[

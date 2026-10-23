@@ -5,14 +5,13 @@ key it by `root_id` and the pins in `sources.py`.
 """
 
 from datetime import datetime
-from functools import lru_cache
 
-import numpy as np
 import polars as pl
 
-from ..sources import DATASTACK, MICRONS_SYNAPSES_PATH, deployment_path
-from .deployment import delta_table, latest_attempts, scan_roots
+from ..sources import DATASTACK, deployment_path
+from .deployment import latest_attempts, scan_roots
 from .features import synapse_vertex_join
+from .synapses import scan_post_synapses
 
 
 def synapse_structure_join(
@@ -76,47 +75,15 @@ def read_structure_predictions(
     )
 
 
-# NOTE: the synapse table is range-partitioned on `post_pt_root_id`, and Polars
-# cannot derive the partition from a root ID. Each file's min and max root in the
-# Delta log give the ranges.
-@lru_cache
-def _synapse_partition_ranges() -> pl.DataFrame:
-    actions = pl.from_arrow(delta_table(str(MICRONS_SYNAPSES_PATH)).get_add_actions(flatten=True))
-    ranges = (
-        actions.group_by(pl.col("partition.post_pt_root_id_partition").alias("partition"))
-        .agg(
-            pl.col("min.post_pt_root_id").min().alias("lo"),
-            pl.col("max.post_pt_root_id").max().alias("hi"),
-        )
-        .sort("lo")
-    )
-    assert (ranges["lo"].shift(-1) > ranges["hi"]).all(), "the synapse partitions overlap"
-    return ranges
-
-
-def synapse_partitions(root_ids: list[int]) -> list[int]:
-    """The synapse-table partitions that hold the post roots `root_ids`."""
-    ranges = _synapse_partition_ranges()
-    roots = np.asarray(root_ids, dtype=np.int64)
-    index = np.searchsorted(ranges["lo"].to_numpy(), roots, side="right") - 1
-    # A root outside every range has no synapses in the table.
-    inside = (index >= 0) & (roots <= ranges["hi"].to_numpy()[np.maximum(index, 0)])
-    return sorted(set(ranges["partition"].to_numpy()[index[inside]].tolist()))
-
-
 def _root_synapses(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
     """`synapse_id`, `root_id`, `pre_pt_root_id` and `structure_id` of every synapse
-    in the synapse table (v1822) onto the post roots `root_ids`.
+    in `microns_synapses` (v1822) onto the post roots `root_ids`.
 
     `structure_id` is null for a synapse in no structure, and for a synapse whose
     root the deployment has not processed.
     """
     synapses = (
-        pl.scan_delta(delta_table(str(MICRONS_SYNAPSES_PATH)))
-        .filter(
-            pl.col("post_pt_root_id_partition").is_in(synapse_partitions(root_ids)),
-            pl.col("post_pt_root_id").is_in(root_ids),
-        )
+        scan_post_synapses(root_ids)
         .select(
             pl.col("id").alias("synapse_id"),
             pl.col("post_pt_root_id").alias("root_id"),

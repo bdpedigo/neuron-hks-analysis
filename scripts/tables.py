@@ -1,6 +1,6 @@
 """Build and inspect the caches of registered tables.
 
-    uv run python scripts/tables.py materialize NAME [--force]
+    uv run python scripts/tables.py materialize NAME [--force] [--estimate] [--yes]
     uv run python scripts/tables.py status
     uv run python scripts/tables.py catalog [--out TABLES.html]
 
@@ -35,7 +35,17 @@ def _frozen_state(table) -> tuple[str, str]:
     return "present", humanize.naturalsize(_size(table.frozen))
 
 
-def materialize(name: str, force: bool) -> None:
+def _confirm(table, estimate_only: bool, yes: bool) -> bool:
+    """Print the estimate of `table`, and return whether to build it."""
+    print(table.estimate())
+    if estimate_only:
+        return False
+    if yes:
+        return True
+    return input(f"Build {table.name}? [y/N] ").strip().lower() == "y"
+
+
+def materialize(name: str, force: bool, estimate_only: bool = False, yes: bool = False) -> None:
     try:
         table = Tables[name]
     except KeyError as error:
@@ -48,13 +58,15 @@ def materialize(name: str, force: bool) -> None:
         raise SystemExit(f"{name!r} is {table.kind}, so it has no cache to build.")
     if path.exists() and not force:
         print(f"{name}: already cached")
+    elif table.estimate is not None and not _confirm(table, estimate_only, yes):
+        return
     else:
         print(f"{name}: building {path}")
         start = time.perf_counter()
         table.ensure_cached(force=force)
         elapsed = humanize.precisedelta(time.perf_counter() - start)
         print(f"{name}: built in {elapsed}")
-    n_rows = pl.scan_parquet(path).select(pl.len()).collect().item()
+    n_rows = table.scan(path).select(pl.len()).collect().item()
     print(f"  path: {path}")
     print(f"  rows: {n_rows:,}")
     print(f"  size: {humanize.naturalsize(_size(path))}")
@@ -154,7 +166,7 @@ def _cache_state(table) -> tuple[str, str]:
         return "-", ""
     if not path.exists():
         return "missing", ""
-    n_rows = pl.scan_parquet(path).select(pl.len()).collect().item()
+    n_rows = table.scan(path).select(pl.len()).collect().item()
     return "cached", f"{n_rows:,} rows, {humanize.naturalsize(_size(path))}"
 
 
@@ -222,12 +234,14 @@ def main() -> None:
     build = commands.add_parser("materialize", help="build a table's cache if it is missing")
     build.add_argument("name", help="the registered table name")
     build.add_argument("--force", action="store_true", help="delete the cache and rebuild it")
+    build.add_argument("--estimate", action="store_true", help="print the estimate of a large table and stop")
+    build.add_argument("--yes", action="store_true", help="build a large table without asking")
     commands.add_parser("status", help="list registered tables and their cache state")
     page = commands.add_parser("catalog", help="write an HTML page that lists the tables")
     page.add_argument("--out", type=Path, default=Path("TABLES.html"), help="the page to write")
     args = parser.parse_args()
     if args.command == "materialize":
-        materialize(args.name, args.force)
+        materialize(args.name, args.force, estimate_only=args.estimate, yes=args.yes)
     elif args.command == "catalog":
         catalog(args.out)
     else:

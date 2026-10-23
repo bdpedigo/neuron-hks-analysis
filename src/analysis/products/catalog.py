@@ -1,7 +1,7 @@
 import shutil
 from functools import cached_property
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 import polars as pl
 
@@ -29,7 +29,12 @@ class Table:
 
     A table with `cache_params` is always read from its cache, which is built on
     first access. The cache is at `data/tables/{folder}/{name}/{cache_key}.parquet`,
-    where `folder` defaults to `v{VERSION}`.
+    where `folder` defaults to `v{VERSION}`. With `format="delta"`, the cache is the
+    Delta table folder `{cache_key}.delta`, and `materialize` writes it.
+
+    A table with `estimate` is too large to build on first access. A read of a
+    missing cache raises, and `just materialize` prints the estimate and asks
+    before it builds.
     To make a product's key change when an input changes, put the input's
     `cache_key` in the product's `cache_params`. A table whose pins do not exist
     yet raises `UnpinnedError` from `cache_key`."""
@@ -43,7 +48,13 @@ class Table:
         folder: Optional[str] = None,
         description: Optional[str] = None,
         frozen: Optional[Path] = None,
+        format: Literal["parquet", "delta"] = "parquet",
+        estimate: Optional[Callable[[], str]] = None,
     ):
+        if format == "delta" and materialize is None:
+            raise ValueError(f"{name!r}: a delta table takes a `materialize`")
+        if estimate is not None and cache_params is None:
+            raise ValueError(f"{name!r}: a table with an `estimate` needs `cache_params`")
         if frozen is not None and (build is None or cache_params is not None):
             raise ValueError(f"{name!r}: a frozen table takes a `build` and no `cache_params`")
         if build is not None and materialize is not None:
@@ -59,6 +70,8 @@ class Table:
         self.cache_params = cache_params
         self.folder = folder or f"v{VERSION}"
         self.frozen = frozen
+        self.format = format
+        self.estimate = estimate
 
     @cached_property
     def _plan(self) -> pl.LazyFrame:
@@ -91,7 +104,7 @@ class Table:
         key = self.cache_key
         if key is None:
             return None
-        return TABLE_PATH / self.folder / self.name / f"{key}.parquet"
+        return TABLE_PATH / self.folder / self.name / f"{key}.{self.format}"
 
     def ensure_cached(self, force: bool = False) -> Path:
         """Build the cache if it is missing, and return its path.
@@ -113,10 +126,21 @@ class Table:
             write_parquet_atomic(self._plan.collect(), path)
         return path
 
+    def scan(self, path: Path) -> pl.LazyFrame:
+        """A scan of the cache at `path`, in the table's format."""
+        if self.format == "delta":
+            return pl.scan_delta(str(path))
+        return pl.scan_parquet(path)
+
     def lazy(self) -> pl.LazyFrame:
-        if self.cache_path is None:
+        path = self.cache_path
+        if path is None:
             return self._plan
-        return pl.scan_parquet(self.ensure_cached())
+        if self.estimate is not None and not path.exists():
+            raise FileNotFoundError(
+                f"{self.name!r} is not built. Run `just materialize {self.name}`."
+            )
+        return self.scan(self.ensure_cached())
 
     def collect(self, **kwargs) -> pl.DataFrame:
         return self.lazy().collect(**kwargs)
@@ -136,7 +160,7 @@ class Table:
             return None
         if path is None or not path.exists():
             return None
-        return pl.scan_parquet(path).collect_schema()
+        return self.scan(path).collect_schema()
 
     def describe(self) -> str:
         path = self.cache_path
@@ -178,6 +202,8 @@ class TableRegistry:
         folder: Optional[str] = None,
         description: Optional[str] = None,
         frozen: Optional[Path] = None,
+        format: Literal["parquet", "delta"] = "parquet",
+        estimate: Optional[Callable[[], str]] = None,
     ) -> Table:
         table = Table(
             name,
@@ -187,6 +213,8 @@ class TableRegistry:
             folder=folder,
             description=description,
             frozen=frozen,
+            format=format,
+            estimate=estimate,
         )
         self._tables[name] = table
         return table

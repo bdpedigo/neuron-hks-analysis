@@ -317,5 +317,7 @@ Tables.register(
     materialize=lambda path: write_parquet_atomic(
         build_unitary_training_spines(cutoff("unitary_training")), path
     ),
-    cache_params=lambda: {"unitary_label_outcomes": Tables["unitary_label_outcomes"].cache_key},
+    cache_params=lambda: {
+        name: Tables[name].cache_key for name in ("unitary_label_outcomes", "microns_synapses")
+    },
 )

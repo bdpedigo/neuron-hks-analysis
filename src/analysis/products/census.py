@@ -7,13 +7,13 @@ import polars as pl
 from standard_transform.datasets import minnie_transform_vx
 
 from ..io import LABEL_CATEGORIES, LABEL_DETAILED_CATEGORIES
-from ..sources import MICRONS_SYNAPSE_RESOLUTION, MICRONS_SYNAPSES_PATH, VERSION, cutoff, pin_params
+from ..sources import MICRONS_SYNAPSE_RESOLUTION, VERSION, cutoff, pin_params
 from . import cell_info, nuclei, skeleton  # noqa: F401 -- register the tables that column_post_synapses reads
 from .catalog import Tables
-from .deployment import delta_table
 from .features import add_distance_to_nucleus
 from .predictions import synapse_posteriors
-from .structures import read_spines, synapse_partitions, synapse_structure
+from .structures import read_spines, synapse_structure
+from .synapses import scan_post_synapses
 
 SPINE_PRODUCTS = (
     "synapse_mapping",
@@ -55,24 +55,16 @@ Tables.register(
     cache_params=lambda: {
         "version": VERSION,
         "cell_selection": Tables["cell_selection"].cache_key,
+        "microns_synapses": Tables["microns_synapses"].cache_key,
         **pin_params(*SPINE_PRODUCTS, as_of=cutoff("test_census")),
     },
 )
 
 
 def _read_post_synapse_rows(root_ids: list[int]) -> pl.DataFrame:
-    """Every column of the synapse table (v1822) for the synapses onto the post
+    """Every column of `microns_synapses` (v1822) for the synapses onto the post
     roots `root_ids`, with `id` as `synapse_id`."""
-    return (
-        pl.scan_delta(delta_table(str(MICRONS_SYNAPSES_PATH)))
-        .filter(
-            pl.col("post_pt_root_id_partition").is_in(synapse_partitions(root_ids)),
-            pl.col("post_pt_root_id").is_in(root_ids),
-        )
-        .drop("post_pt_root_id_partition")
-        .rename({"id": "synapse_id"})
-        .collect()
-    )
+    return scan_post_synapses(root_ids).rename({"id": "synapse_id"}).collect()
 
 
 def _drop_autapses(synapses: pl.DataFrame) -> pl.DataFrame:
@@ -233,8 +225,8 @@ Tables.register(
     description=(
         "One row per synapse onto a column cell, with no autapses, at the "
         "`test_census` cutoff. The synapses from the column cells onto other roots "
-        "are not here: see `proofread_pre_synapses`. It holds every column of the "
-        "synapse table, the domain posteriors and `tag`, the spine structure "
+        "are not here: see `proofread_pre_synapses`. It holds every column of "
+        "`microns_synapses`, the domain posteriors and `tag`, the spine structure "
         "(`structure_id` and `spine_*`, with the volume from `column_spines`), "
         "`tag_detailed`, and per side (`pre_`, `post_`) the skeleton compartment and "
         "distances, the cell info and the distance to the nucleus. The column cell "
@@ -250,6 +242,7 @@ Tables.register(
                 "cell_selection",
                 "cell_info",
                 "column_spines",
+                "microns_synapses",
                 "skeleton_synapse_features",
                 "root_nuclei",
             )

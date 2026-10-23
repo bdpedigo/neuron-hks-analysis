@@ -1,6 +1,7 @@
 import polars as pl
 import pytest
 
+from analysis.products import catalog
 from analysis.products.catalog import Table, condense_schema
 
 
@@ -57,3 +58,34 @@ def test_planned_table_has_no_data():
 def test_planned_table_needs_a_description():
     with pytest.raises(ValueError):
         Table("future")
+
+
+def _write_delta(path):
+    from deltalake import write_deltalake
+
+    write_deltalake(str(path), pl.DataFrame({"a": [1, 2, 3]}).to_arrow())
+
+
+def test_delta_table_materializes_to_a_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(catalog, "TABLE_PATH", tmp_path)
+    table = Table("lake", materialize=_write_delta, cache_params=lambda: {"v": 1}, format="delta")
+    assert table.cache_path.name.endswith(".delta")
+    assert table.lazy().collect()["a"].to_list() == [1, 2, 3]
+    assert table.cache_path.is_dir()
+    assert table.peek_schema() == pl.Schema({"a": pl.Int64})
+
+
+def test_table_with_an_estimate_is_not_built_on_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(catalog, "TABLE_PATH", tmp_path)
+    table = Table(
+        "large",
+        materialize=_write_delta,
+        cache_params=lambda: {"v": 1},
+        format="delta",
+        estimate=lambda: "about 1 GB",
+    )
+    with pytest.raises(FileNotFoundError, match="just materialize large"):
+        table.lazy()
+    assert not table.cache_path.exists()
+    table.ensure_cached()
+    assert table.lazy().collect().height == 3
