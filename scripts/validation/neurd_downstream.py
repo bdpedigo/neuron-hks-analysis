@@ -249,7 +249,7 @@ sns.stripplot(
     legend=False,
     ax=ax,
 )
-ax.set(xlim=(-0.02, 1.02), xlabel="Fraction of a cell's inputs with a NEURD compartment", ylabel="")
+ax.set(xlim=(-0.02, 1.02), xlabel="Fraction of inputs with\na NEURD compartment", ylabel="")
 set_cell_type_ticks(ax)
 save_matplotlib_figure(fig, "input_neurd_coverage_per_cell", subfolder=SUBFOLDER)
 
@@ -278,7 +278,7 @@ for ax, broad_type in zip(axs, ["excitatory", "inhibitory"]):
         ax=ax,
     )
     ax.set(title=f"Post {broad_type} ({counts.values.sum():,} synapses)", xlabel="NEURD", ylabel="")
-    ax.tick_params(axis="x", rotation=45)
+    ax.set_xticks(ax.get_xticks(), NEURD_DETAILED, rotation=45, ha="right")
 axs[0].set_ylabel("HKS")
 save_matplotlib_figure(fig, "input_confusion_by_broad_type", subfolder=SUBFOLDER)
 
@@ -307,7 +307,7 @@ for ax, version in zip(axs, ["HKS", "HKS on NEURD-labeled"]):
         ax=ax,
     )
     ax.plot([0, 1], [0, 1], color="grey", linestyle="--", linewidth=1, zorder=-1)
-    ax.set(xlabel=f"Spine proportion, {version}", ylabel="Spine proportion, NEURD")
+    ax.set(xlabel=f"Spine proportion,\n{version}", ylabel="Spine proportion, NEURD")
 save_matplotlib_figure(fig, "input_spine_proportion_hks_vs_neurd", subfolder=SUBFOLDER)
 
 # %% COLUMN-TO-COLUMN CELL TYPE PAIR PROPORTIONS
