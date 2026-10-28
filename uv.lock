@@ -118,7 +118,7 @@ requires-dist = [
     { name = "meshmash", editable = "submodules/meshmash" },
     { name = "mlflow-skinny", specifier = ">=3.16.1" },
     { name = "mmh3", specifier = ">=5.3.0" },
-    { name = "nglui", specifier = ">=4.7.2" },
+    { name = "nglui", specifier = ">=4.8.0" },
     { name = "ossify", specifier = ">=0.3.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "panel-mosaic", editable = "submodules/panel_mosaic" },
@@ -2758,7 +2758,7 @@ wheels = [
 
 [[package]]
 name = "nglui"
-version = "4.7.2"
+version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -2775,9 +2775,9 @@ dependencies = [
     { name = "six" },
     { name = "webcolors" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fc/a5/66c19716b0a753f0699351454706f111b48bf91c56779cea128db1e2cfb4/nglui-4.7.2.tar.gz", hash = "sha256:26ab97e844b3c5404b6ef97fc74bdd894ebe57e79f6eed4276c025319ab1602c", size = 1173915, upload-time = "2026-04-08T22:07:31.916Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/ad/f6adbbeaea9bf9fc73aed0be7bef3020931e8f0de87de67adec5d4610d79/nglui-4.9.0.tar.gz", hash = "sha256:2f73bf0bd5e29257b76f816442b30afdd63dc087551e147bd6afb1cddb87fd59", size = 1365254, upload-time = "2026-09-23T02:07:47.147Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1a/97/771810c735723726279a3fb8946cde2673c28755a231ff880eab12b2bb93/nglui-4.7.2-py3-none-any.whl", hash = "sha256:549b06d2bad28a7357689f3ead917c5e12d5ca4b6829f4d0383526835a3de1d3", size = 58523, upload-time = "2026-04-08T22:07:30.279Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/ca/004829a5f0b74a41fd700c69e415493989ef8c89e746b50bc9a449784794/nglui-4.9.0-py3-none-any.whl", hash = "sha256:ec9e07e888100ad3f8651a1a0e63478530f885ddbba9a482f7ba391de5880d1d", size = 101700, upload-time = "2026-09-23T02:07:45.858Z" },
 ]
 
 [[package]]

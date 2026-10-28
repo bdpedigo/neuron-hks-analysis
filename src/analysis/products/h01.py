@@ -14,6 +14,7 @@ The tables follow the MICrONS chain with an `h01_` prefix: `h01_labels`,
 """
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import polars as pl
@@ -40,12 +41,17 @@ TAG_CATEGORIES = ["spine", "shaft", "soma", "orphan", "error", "other", "odd_seg
 LABEL_CATEGORIES = ["spine", "shaft", "soma"]
 
 
-def read_h01_annotations() -> pl.DataFrame:
-    """One row per labeled point: the state root, the point in nm, and its tags."""
-    states = pd.read_csv(H01_TABLE_PATH / "states.csv")
+def read_h01_annotations(table_path: Path = H01_TABLE_PATH) -> pl.DataFrame:
+    """One row per labeled point: the state root, the point in nm, and its tags.
+
+    `table_path` holds `states.csv` and the `states/` folder. The parser reads both
+    tag schemes: the first round's `uint8` tag properties, and the `bool`
+    properties of current Spelunker (nglui 4.8.0 and later).
+    """
+    states = pd.read_csv(table_path / "states.csv")
     frames = []
     for state in states.itertuples():
-        state_json = json.loads((H01_TABLE_PATH / "states" / f"{state.state_id}.json").read_text())
+        state_json = json.loads((table_path / "states" / f"{state.state_id}.json").read_text())
         df = StateParser(state_json).annotation_dataframe(expand_tags=True)
         df["state_id"] = state.state_id
         df["cohort"] = state.cohort

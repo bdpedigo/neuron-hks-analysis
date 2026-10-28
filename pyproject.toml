@@ -17,7 +17,7 @@ dependencies = [
     "meshmash",
     "mlflow-skinny>=3.16.1",
     "mmh3>=5.3.0",
-    "nglui>=4.7.2",
+    "nglui>=4.8.0",
     "ossify>=0.3.0",
     "pandas>=2.3.3",
     "panel-mosaic",
