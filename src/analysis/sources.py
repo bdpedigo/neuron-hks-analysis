@@ -20,14 +20,19 @@ STEP_PINS = {
     "vertex_domains": ("s4", "p-2e737b09a92af64d"),
     "domain_features": ("s4", "p-e758527c9d981378"),
     "domain_edges": ("s4", "p-b60a113f02ed8102"),
-    # The hash includes the model URI, here ssa_model_full_v2.
-    "domain_predictions": ("s1", "p-c6071657570ccf34"),
-    "synapse_predictions": ("s1", "p-9afb050cbd359710"),
-    "vertex_structures": ("s2", "p-1404d7eee3ae17fe"),
-    "structure_morphometry": ("s2", "p-f3d682d0163596cb"),
-    "structure_features": ("s2", "p-e78df7b56789c3e0"),
-    "structure_anchors": ("s1", "p-63a99efc6ccae702"),
-    # The hash includes the model URI, here unitary_hks_v2.
+    # The hash includes the model URI, here ssa_model_full_v3. The tables below it
+    # are the v3 run of the MICrONS test cohort (ssa-backlog TASK-46).
+    # NOTE: H01 has no v3 rows yet, so `h01_predictions` reads nothing until the
+    # H01 test cohort runs v3.
+    "domain_predictions": ("s1", "p-0fc8e65121f7b0af"),
+    "synapse_predictions": ("s1", "p-692452c9f9d16916"),
+    "vertex_structures": ("s2", "p-738eb543881d532d"),
+    "structure_morphometry": ("s2", "p-cb22442d9e5d68d6"),
+    "structure_features": ("s2", "p-29be268dcfe5214a"),
+    "structure_anchors": ("s1", "p-6afda073e38e1707"),
+    # The hash includes the model URI, here unitary_hks_v2, on the v2 spines.
+    # NOTE: its structures are the v2 spines, not the v3 spines pinned above,
+    # until TASK-32 runs unitary_hks_v3.
     "structure_predictions": ("s1", "p-145bf856dcf23c7a"),
 }
 
@@ -76,18 +81,18 @@ CUTOFFS = {
     # MICrONS and H01 test cohorts were complete at this time (last data commits
     # 2026-10-21 16:58 UTC and 01:55 UTC).
     "training": datetime(2026, 10, 21, 18, 45, tzinfo=timezone.utc),
-    # The deployment predictions that the validation figures score. The
-    # predictions of the MICrONS and H01 test cohorts were complete at this time
-    # (last data commits 2026-10-21 23:15 UTC and 21:44 UTC).
-    "validation": datetime(2026, 10, 21, 23, 20, tzinfo=timezone.utc),
-    # The spine structures that train the unitary-spine model. The structures of
-    # the MICrONS test cohort were complete at this time (last data commit
-    # 2026-10-22 12:15 UTC).
-    "unitary_training": datetime(2026, 10, 22, 12, 20, tzinfo=timezone.utc),
+    # The deployment predictions that the validation figures score. The v3
+    # predictions of the MICrONS test cohort were complete at this time
+    # (run-20261028-054619-716f, last data commit 2026-10-28 08:03 UTC).
+    "validation": datetime(2026, 10, 28, 8, 10, tzinfo=timezone.utc),
+    # The spine structures that train the unitary-spine model. The v3 structures
+    # of the MICrONS test cohort were complete at this time (last data commit
+    # 2026-10-28 08:03 UTC).
+    "unitary_training": datetime(2026, 10, 28, 8, 10, tzinfo=timezone.utc),
     # The census products on the MICrONS test cohort, which read every table
-    # through the unitary predictions. The predictions were complete at this time
-    # (last data commit 2026-10-22 19:30 UTC). The full run adds a "census" cutoff.
-    "test_census": datetime(2026, 10, 22, 19, 35, tzinfo=timezone.utc),
+    # through the unitary predictions. The v3 tables were complete at this time
+    # (last data commit 2026-10-28 08:03 UTC). The full run adds a "census" cutoff.
+    "test_census": datetime(2026, 10, 28, 8, 10, tzinfo=timezone.utc),
     # The features of the point labels (`labeled_point_features`). The deployment
     # ran 6 roots of the CAVE point labels that the test cohort did not hold
     # (meshmash-deployment jobs/point_label_roots, last data commit 2026-10-28
