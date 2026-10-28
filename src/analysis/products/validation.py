@@ -146,6 +146,8 @@ Tables.register(
     ),
     cache_params=lambda: {
         "version": VERSION,
+        "source": str(NEURD_LABELS_PATH),
+        "microns_synapses": Tables["microns_synapses"].cache_key,
         "cell_selection": Tables["cell_selection"].cache_key,
     },
 )
