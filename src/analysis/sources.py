@@ -29,10 +29,9 @@ STEP_PINS = {
     "structure_morphometry": ("s2", "p-cb22442d9e5d68d6"),
     "structure_features": ("s2", "p-29be268dcfe5214a"),
     "structure_anchors": ("s1", "p-6afda073e38e1707"),
-    # The hash includes the model URI, here unitary_hks_v2, on the v2 spines.
-    # NOTE: its structures are the v2 spines, not the v3 spines pinned above,
-    # until TASK-32 runs unitary_hks_v3.
-    "structure_predictions": ("s1", "p-145bf856dcf23c7a"),
+    # The hash includes the model URI, here unitary_hks_v3, on the v3 spines
+    # (ssa-backlog TASK-53).
+    "structure_predictions": ("s1", "p-3750b9607a23e3a0"),
 }
 
 
@@ -92,9 +91,12 @@ CUTOFFS = {
     # 2026-10-28 08:03 UTC).
     "unitary_training": datetime(2026, 10, 28, 8, 10, tzinfo=timezone.utc),
     # The census products on the MICrONS test cohort, which read every table
-    # through the unitary predictions. The v3 tables were complete at this time
-    # (last data commit 2026-10-28 08:03 UTC). The full run adds a "census" cutoff.
-    "test_census": datetime(2026, 10, 28, 8, 10, tzinfo=timezone.utc),
+    # through the unitary predictions. The unitary_hks_v3 predictions of the
+    # cohort (run-20261028-190710-318d, attempts to 19:14:35 UTC, last data commit
+    # 19:15:51 UTC) were complete at this time, and the other v3 tables since
+    # 08:03 UTC. The full run skips these roots, and its first unitary attempt is
+    # at 19:43 UTC. The full run adds a "census" cutoff.
+    "test_census": datetime(2026, 10, 28, 19, 20, tzinfo=timezone.utc),
     # The features of the point labels (`labeled_point_features`). The deployment
     # ran 6 roots of the CAVE point labels that the test cohort did not hold
     # (meshmash-deployment jobs/point_label_roots, last data commit 2026-10-28
