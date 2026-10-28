@@ -228,6 +228,7 @@ for experiment, (splits, train_h01_of, test_h01_of, _) in EXPERIMENTS.items():
             # The cached tables under `model_inputs` and `h01_retrain_model_inputs`.
             inputs=[
                 Tables["labeled_synapse_features"],
+                Tables["labeled_point_features"],
                 Tables["root_nuclei"],
                 Tables["h01_labeled_synapse_features"],
                 Tables["h01_root_nuclei"],
