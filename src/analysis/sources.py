@@ -115,6 +115,11 @@ def pin_params(*products: str, as_of: datetime) -> dict:
 MICRONS_SYNAPSES_PATH = UPath(
     f"gs://mat_dbs/public/deltalake_exports/{DATASTACK}/v{VERSION}/synapses_pni_2/post_pt_root_id"
 )
+# S7: the public export of the NEURD table `synapse_target_structure` at `VERSION`.
+# It has no root IDs, so join it to `microns_synapses` on `target_id` = `id`.
+NEURD_LABELS_PATH = UPath(
+    f"gs://mat_dbs/public/deltalake_exports/{DATASTACK}/v{VERSION}/synapse_target_structure/target_id"
+)
 MICRONS_SYNAPSE_RESOLUTION = (4.0, 4.0, 40.0)
 
 # NOTE: the ossify skeletons (S5) carry the synapses at the time of the
