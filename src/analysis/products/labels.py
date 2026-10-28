@@ -8,7 +8,7 @@ import polars as pl
 from caveclient import CAVEclient
 from pytz import utc
 
-from ..io import TABLE_PATH, V1412_CELL_INFO_PATH
+from ..io import FROZEN_PATH, TABLE_PATH, V1412_CELL_INFO_PATH
 from ..sources import DATASTACK, VERSION
 from .catalog import Tables, write_parquet_atomic
 
@@ -262,6 +262,9 @@ def fetch_label_table(version=VERSION, live=False) -> pl.DataFrame:
                     "ctr_pt_position_z": "pt_position_z",
                 }
             )
+        else:
+            # A point table: the query reads its roots at `root_timestamp`.
+            table = table.rename(columns={"pt_root_id": f"pt_root_id_{version}"})
 
         # print(f"Getting supervoxel ids for {table_name}...")
         # table[f"pt_root_id_{version}"] = client.chunkedgraph.get_roots(
@@ -325,6 +328,62 @@ Tables.register(
     ),
     cache_params=lambda: {"version": VERSION},
 )
+# The hand labels of mesh domains (ssa-backlog TASK-43 and TASK-48), exported as
+# points by `scratch/feature_dropout/gaps_export.py --freeze`. The JSONL label
+# files in scratch are the source; this export is what training reads.
+HAND_POINT_LABELS_PATH = FROZEN_PATH / "hand_point_labels.parquet"
+
+Tables.register(
+    "hand_point_labels",
+    description=(
+        "One row per hand label of a mesh domain (gap, audit and referee labels), "
+        "as a point: position (nm), supervoxel and root at the current version. "
+        "`labeled_domain_id` is the domain labeled in the pinned feature run, for "
+        "checks only. Classes spine, shaft and soma."
+    ),
+    build=lambda: pl.scan_parquet(HAND_POINT_LABELS_PATH),
+    frozen=HAND_POINT_LABELS_PATH,
+)
+
+POINT_LABEL_COLUMNS = ["point_id", "table_name", "id", "root_id", "x", "y", "z", "tag", "sample_weight"]
+
+
+def point_labels() -> pl.LazyFrame:
+    frames = [
+        Tables["labels"].lazy().filter(pl.col("target_id") == -1),
+        Tables["hand_point_labels"].lazy(),
+    ]
+    return (
+        pl.concat(
+            [
+                frame.select(
+                    "table_name",
+                    pl.col("id").cast(pl.Int64),
+                    pl.col(f"pt_root_id_{VERSION}").cast(pl.Int64).alias("root_id"),
+                    *[pl.col(f"pt_position_{c}").cast(pl.Float64).alias(c) for c in "xyz"],
+                    "tag",
+                    pl.col("sample_weight").cast(pl.Float64),
+                )
+                for frame in frames
+            ]
+        )
+        .sort("table_name", "id")
+        .with_row_index("point_id")
+        .with_columns(pl.col("point_id").cast(pl.Int64))
+        .select(POINT_LABEL_COLUMNS)
+    )
+
+
+Tables.register(
+    "point_labels",
+    point_labels,
+    description=(
+        "One row per point label: the CAVE point labels (`target_id` -1 in "
+        "`labels`) and `hand_point_labels`. `point_id` numbers the rows by "
+        "(`table_name`, `id`). Positions in nm."
+    ),
+)
+
 Tables.register(
     "synapse_labels",
     lambda: Tables["labels"]

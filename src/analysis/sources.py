@@ -88,6 +88,11 @@ CUTOFFS = {
     # through the unitary predictions. The predictions were complete at this time
     # (last data commit 2026-10-22 19:30 UTC). The full run adds a "census" cutoff.
     "test_census": datetime(2026, 10, 22, 19, 35, tzinfo=timezone.utc),
+    # The features of the point labels (`labeled_point_features`). The deployment
+    # ran 6 roots of the CAVE point labels that the test cohort did not hold
+    # (meshmash-deployment jobs/point_label_roots, last data commit 2026-10-28
+    # 01:32 UTC). The synapse rows stay at "training".
+    "training_points": datetime(2026, 10, 28, 1, 40, tzinfo=timezone.utc),
 }
 
 

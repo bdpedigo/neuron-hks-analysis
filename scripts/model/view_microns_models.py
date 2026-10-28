@@ -1,5 +1,6 @@
-"""View the predictions of every model variant, with and without the H01 retrain
-rows, on whole MICrONS cells. See `analysis.model_viewer` for the controls.
+"""View the predictions of every model variant at `MODEL_VERSION`, and with the H01
+retrain rows where those models exist, on whole MICrONS cells. See
+`analysis.model_viewer` for the controls.
 
 Pools:
 - `validation` (default): the 132 validation cells. No model trained on them.

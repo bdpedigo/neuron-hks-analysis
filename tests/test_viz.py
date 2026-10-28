@@ -222,3 +222,36 @@ def test_viewer_smoke(tmp_path):
     viewer.plotter.close()
     viewer.close()
     assert (tmp_path / "view.png").exists()
+
+
+def test_viewer_smoothing():
+    cell = fake_cell(1)[0]
+
+    def scene_for_root(root_id):
+        return cell_to_scene(cell, {"deployment": deployment_posteriors(cell)}, ["hks_0"])
+
+    viewer = Viewer(
+        scene_for_root,
+        CellOrder([1], start=0),
+        selectors={"color": ["pred_label"]},
+        resolve=lambda state: ("deployment/pred_label", "deployment/pred_label"),
+        prefetch=False,
+        off_screen=True,
+        smoothing=True,
+    )
+    viewer.step(0)
+    raw = np.asarray(viewer.surface.points).copy()
+    assert not viewer.state["smooth"]
+    viewer.set_smooth(True)
+    smoothed = np.asarray(viewer.surface.points)
+    assert smoothed.shape == raw.shape
+    assert not np.allclose(smoothed, raw)
+    assert "synapses" in viewer.plotter.actors
+    # each mapped synapse moved with its vertex
+    on = viewer.scene.synapse_vertex >= 0
+    shift = smoothed[viewer.scene.synapse_vertex[on]] - raw[viewer.scene.synapse_vertex[on]]
+    assert np.allclose(viewer.synapse_positions[on] - viewer.scene.synapse_positions[on], shift)
+    viewer.set_smooth(False)
+    assert np.allclose(viewer.surface.points, raw)
+    viewer.plotter.close()
+    viewer.close()

@@ -58,11 +58,14 @@ spectral_columns = select_spectral_columns(result.columns)
 # rows without domain features (not yet processed by the meshmash deployment) can't
 # be used for training or evaluation. Every variant trains on these same rows.
 training_table = result.drop_nulls(subset=spectral_columns).to_pandas().set_index(
-    "synapse_id"
+    "label_key"
 )
 sample_weight = training_table["sample_weight"].astype(float)
 
-save_variables(model_n_training_synapses=len(training_table), format="{:,}")
+# Synapse rows have a `synapse_id`; point rows (`point_labels`) have a `point_id`.
+is_synapse = training_table["synapse_id"].notna()
+save_variables(model_n_training_synapses=int(is_synapse.sum()), format="{:,}")
+save_variables(model_n_training_points=int((~is_synapse).sum()), format="{:,}")
 save_variables(params_min_root_labels=MIN_ROOT_LABELS)
 
 # The nucleus mask: see `analysis.models`.
@@ -109,9 +112,12 @@ for name, spec in MODEL_SPECS.items():
     )
     models[name] = model
 
-# %% the learning curve below uses only the main model's features and labels
+# %% the learning curve below uses only the main model's features and the synapse
+# labels, so it stays comparable across model versions
 
 X_train, y_train = make_xy(MODEL_SPECS[MAIN_MODEL])
+X_train, y_train = X_train[is_synapse], y_train[is_synapse]
+curve_weight = sample_weight[is_synapse]
 model = models[MAIN_MODEL]
 
 
@@ -135,7 +141,7 @@ for fold in tqdm(range(10)):
     )
     X_train_fold, X_test_fold = X_train.iloc[train_index], X_train.iloc[test_index]
     y_train_fold, y_test_fold = y_train.iloc[train_index], y_train.iloc[test_index]
-    weights_train_fold = sample_weight.iloc[train_index]
+    weights_train_fold = curve_weight.iloc[train_index]
 
     rng = np.random.default_rng(fold)
     for frac in data_fractions:

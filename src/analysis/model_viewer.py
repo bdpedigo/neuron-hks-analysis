@@ -1,10 +1,11 @@
-"""The model comparison viewer: every variant in `MODEL_SPECS`, trained on MICrONS
-only or on MICrONS + the H01 retrain rows, on whole cells of any datastack in
-`products.roots.ROOT_SOURCES`.
+"""The model comparison viewer: every variant in `MODEL_SPECS` at `MODEL_VERSION`,
+trained on MICrONS only and, where those models exist, on MICrONS + the H01 retrain
+rows, on whole cells of any datastack in `products.roots.ROOT_SOURCES`.
 
 One mesh at a time. The checkboxes on the left choose the training rows, the
 variant, and what colors the mesh (the predicted label, the posterior blend,
-p(spine), or a feature from the slider). Every synapse shows the predicted label
+p(spine), or a feature from the slider). "smooth mesh (Taubin)" (off by default)
+draws the mesh smoothed. Every synapse shows the predicted label
 of its domain; a checkbox shows or hides them. Keys: `n` for the next cell, `b`
 for the one before. Right-click flies the camera to the clicked point.
 
@@ -20,6 +21,7 @@ import argparse
 from collections.abc import Callable, Sequence
 from functools import partial
 
+from .io import MODEL_PATH
 from .models import MODEL_SPECS, MODEL_VERSION, load_ssa_model, predict
 from .products.root_cache import cached
 from .products.roots import domain_frame, feature_columns, load_root_cell
@@ -28,11 +30,6 @@ from .viz import CellOrder, Slider, Viewer, cell_to_scene
 # The retrained models come from the last cell of `scripts/h01/retrain_h01.py`.
 TRAINING = {"no retrain": "", "retrain": "_h01"}
 VARIANTS = {name.removeprefix("ssa_model_"): name for name in MODEL_SPECS}
-MODELS = {
-    f"{training}/{variant}": f"{name}{suffix}_{MODEL_VERSION}"
-    for training, suffix in TRAINING.items()
-    for variant, name in VARIANTS.items()
-}
 COLORS = ["pred_label", "blend", "p(spine)", "feature"]
 MAX_CACHED_ROOTS = 5
 
@@ -40,10 +37,25 @@ MAX_CACHED_ROOTS = 5
 _worker = {}
 
 
-def start_worker(datastack: str, use_cache: bool = True) -> None:
-    """Runs once in the worker: load every model, and set up the cell loader."""
+def available_models() -> dict[str, dict[str, str]]:
+    """`{training: {"training/variant": model name}}` for each `TRAINING` set whose
+    every variant is in `MODEL_PATH` at `MODEL_VERSION`."""
+    out = {}
+    for training, suffix in TRAINING.items():
+        names = {
+            f"{training}/{variant}": f"{name}{suffix}_{MODEL_VERSION}"
+            for variant, name in VARIANTS.items()
+        }
+        if all((MODEL_PATH / name).exists() for name in names.values()):
+            out[training] = names
+    return out
+
+
+def start_worker(datastack: str, models: dict[str, str], use_cache: bool = True) -> None:
+    """Runs once in the worker: load `models` (key to name), and set up the cell
+    loader."""
     _worker["datastack"] = datastack
-    _worker["models"] = {key: load_ssa_model(name) for key, name in MODELS.items()}
+    _worker["models"] = {key: load_ssa_model(name) for key, name in models.items()}
     _worker["load"] = (
         cached(load_root_cell, max_roots=MAX_CACHED_ROOTS) if use_cache else load_root_cell
     )
@@ -80,11 +92,21 @@ def make_viewer(
     prefetch: bool = True,
     off_screen: bool = False,
 ) -> Viewer:
+    available = available_models()
+    if not available:
+        raise FileNotFoundError(
+            f"no model set at {MODEL_VERSION} in {MODEL_PATH}: "
+            f"run scripts/model/train.py"
+        )
+    missing = [training for training in TRAINING if training not in available]
+    if missing:
+        print(f"no {MODEL_VERSION} models for {missing}; showing {list(available)}")
+    models = {key: name for names in available.values() for key, name in names.items()}
     return Viewer(
         scene_for_root,
         CellOrder(roots, start=start, seed=seed),
         selectors={
-            "training": list(TRAINING),
+            "training": list(available),
             "variant": list(VARIANTS),
             "color": COLORS,
         },
@@ -96,8 +118,9 @@ def make_viewer(
             )
         },
         prefetch=prefetch,
-        worker_initializer=partial(start_worker, datastack, use_cache),
+        worker_initializer=partial(start_worker, datastack, models, use_cache),
         off_screen=off_screen,
+        smoothing=True,
     )
 
 

@@ -219,14 +219,35 @@ def add_distance_to_nucleus(
 MIN_ROOT_LABELS = 5
 
 
+def model_inputs() -> pl.LazyFrame:
+    synapse_rows = (
+        Tables["labeled_synapse_features"]
+        .lazy()
+        .filter(pl.len().over("root_id") >= MIN_ROOT_LABELS)
+        .with_columns(label_key=pl.format("synapse_{}", "synapse_id"))
+    )
+    # NOTE: `MIN_ROOT_LABELS` is a rule for synapse labels, so it skips the points.
+    point_rows = (
+        Tables["labeled_point_features"]
+        .lazy()
+        .drop("mesh_index", "distance_nm", "domain_id")
+        .rename({"x": "pt_position_x", "y": "pt_position_y", "z": "pt_position_z"})
+        .with_columns(label_key=pl.format("{}_{}", "table_name", "id"))
+    )
+    return add_distance_to_nucleus(
+        pl.concat([synapse_rows, point_rows], how="diagonal_relaxed"),
+        Tables["root_nuclei"].lazy(),
+    )
+
+
 # NOTE: meshmash-deployment computes `distance_to_nucleus` in its prediction step,
 # not in `domain_features`, so the training rows get the feature here
 Tables.register(
     "model_inputs",
-    lambda: add_distance_to_nucleus(
-        Tables["labeled_synapse_features"]
-        .lazy()
-        .filter(pl.len().over("root_id") >= MIN_ROOT_LABELS),
-        Tables["root_nuclei"].lazy(),
+    model_inputs,
+    description=(
+        "The training rows: the labeled synapses on roots with at least "
+        "`MIN_ROOT_LABELS` labels, and every point label. `label_key` is the row "
+        "key (`synapse_id` is null on a point row, `point_id` on a synapse row)."
     ),
 )

@@ -34,6 +34,11 @@ from .widgets import BUTTON_PITCH, ChannelSlider, RadioGroup, add_checkbox_row
 LEFT = 12
 GROUP_GAP = 12
 
+# The "smooth mesh" option: pyvista's Taubin (VTK windowed sinc) smoothing, with the
+# parameters of riff's `taubin` operation (from the postsyn-census-benchmarks
+# Taubin study). Display only: the scene's vertices and channels do not change.
+TAUBIN_KWARGS = dict(n_iter=20, pass_band=0.1, normalize_coordinates=True)
+
 # resolve(state) -> (mesh channel, synapse channel); None draws the plain mesh or
 # no synapses.
 Resolve = Callable[[dict], tuple[Optional[str], Optional[str]]]
@@ -103,6 +108,8 @@ class Viewer:
     - `resolve(state)`: the mesh channel and the synapse channel to show. Every
       synapse shows, in the no-value color where the channel has no value.
     - A checkbox shows or hides the synapse points (`state["synapses"]`).
+    - With `smoothing`, a checkbox (off by default) draws the mesh Taubin-smoothed
+      (`TAUBIN_KWARGS`, `state["smooth"]`); each synapse point moves with its vertex.
     - Keys: `n` for the next root, `b` for the one before.
 
     With `prefetch`, `scene_for_root` runs in one worker process (spawned, so it
@@ -122,6 +129,7 @@ class Viewer:
         worker_initializer: Optional[Callable[[], None]] = None,
         keep_scenes: int = 2,
         off_screen: bool = False,
+        smoothing: bool = False,
     ):
         self.scene_for_root = scene_for_root
         self.order = order
@@ -143,7 +151,7 @@ class Viewer:
             worker_initializer()
 
         self.plotter = new_plotter(off_screen=off_screen)
-        self.state: dict = {"synapses": True}
+        self.state: dict = {"synapses": True, "smooth": False}
         self._radios = {}
         top = WINDOW[1] - 40
         for name, options in selectors.items():
@@ -162,6 +170,17 @@ class Viewer:
             label="synapse points",
             name="checkbox:synapses",
         )
+        if smoothing:
+            top -= BUTTON_PITCH
+            add_checkbox_row(
+                self.plotter,
+                self.set_smooth,
+                value=False,
+                x=LEFT,
+                y=top,
+                label="smooth mesh (Taubin)",
+                name="checkbox:smooth",
+            )
         self._sliders: dict[str, tuple[ChannelSlider, Slider]] = {}
         for i, (name, spec) in enumerate((sliders or {}).items()):
             y = 0.12 + 0.1 * i
@@ -187,6 +206,13 @@ class Viewer:
                 self._paint()
 
         return set_value
+
+    def set_smooth(self, value: bool) -> None:
+        """Draw the mesh smoothed or not (as a click on the checkbox does)."""
+        self.state["smooth"] = bool(value)
+        if self.scene is not None:
+            self._set_surface(self.scene)
+            self._paint()
 
     def select(self, name: str, value) -> None:
         """Set a selector (as a click on it does)."""
@@ -239,12 +265,38 @@ class Viewer:
             text, position="upper_edge", font_size=FONT_SIZE + 2, color=INK, name="title"
         )
 
-    def _show(self, scene: Scene) -> None:
-        self.scene = scene
-        self.surface = pv.PolyData.from_regular_faces(scene.vertices, scene.faces)
+    def _smoothed_vertices(self, scene: Scene) -> np.ndarray:
+        """The Taubin-smoothed vertices of `scene`, computed once per scene."""
+        if "taubin_vertices" not in scene.meta:
+            self._title(f"smoothing {scene.name}...")
+            self.plotter.render()
+            smoothed = pv.PolyData.from_regular_faces(
+                np.asarray(scene.vertices, dtype=float), scene.faces
+            ).smooth_taubin(**TAUBIN_KWARGS)
+            if smoothed.n_points != len(scene.vertices):
+                raise RuntimeError("Taubin smoothing changed the vertex count")
+            scene.meta["taubin_vertices"] = np.asarray(smoothed.points)
+        return scene.meta["taubin_vertices"]
+
+    def _set_surface(self, scene: Scene) -> None:
+        """The drawn surface and synapse points of `scene`, smoothed or not."""
+        vertices = scene.vertices
+        self.synapse_positions = scene.synapse_positions
+        if self.state["smooth"]:
+            vertices = self._smoothed_vertices(scene)
+            # each synapse moves with its vertex; one with no vertex stays
+            on = scene.synapse_vertex >= 0
+            shift = np.zeros_like(scene.synapse_positions, dtype=float)
+            shift[on] = vertices[scene.synapse_vertex[on]] - scene.vertices[scene.synapse_vertex[on]]
+            self.synapse_positions = scene.synapse_positions + shift
+        self.surface = pv.PolyData.from_regular_faces(vertices, scene.faces)
         self.base = self.plotter.add_mesh(
             self.surface, color=MESH_COLOR, opacity=MESH_OPACITY, name="base", reset_camera=False
         )
+
+    def _show(self, scene: Scene) -> None:
+        self.scene = scene
+        self._set_surface(scene)
         self._paint()
         self.plotter.view_xy()
         self.plotter.camera.up = (0, -1, 0)
@@ -275,7 +327,7 @@ class Viewer:
             and synapse_name in scene.channels
             and len(scene.synapse_positions)
         ):
-            points = pv.PolyData(scene.synapse_positions)
+            points = pv.PolyData(self.synapse_positions)
             kwargs = self._color_kwargs(scene, "synapses", synapse_name, points, show_bar=mesh_name is None)
             self.plotter.add_points(
                 points,
