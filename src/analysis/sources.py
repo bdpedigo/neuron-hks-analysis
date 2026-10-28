@@ -21,9 +21,8 @@ STEP_PINS = {
     "domain_features": ("s4", "p-e758527c9d981378"),
     "domain_edges": ("s4", "p-b60a113f02ed8102"),
     # The hash includes the model URI, here ssa_model_full_v3. The tables below it
-    # are the v3 run of the MICrONS test cohort (ssa-backlog TASK-46).
-    # NOTE: H01 has no v3 rows yet, so `h01_predictions` reads nothing until the
-    # H01 test cohort runs v3.
+    # are the v3 runs of the MICrONS test cohort (ssa-backlog TASK-46) and of the
+    # H01 test cohort (TASK-51).
     "domain_predictions": ("s1", "p-0fc8e65121f7b0af"),
     "synapse_predictions": ("s1", "p-692452c9f9d16916"),
     "vertex_structures": ("s2", "p-738eb543881d532d"),
@@ -82,9 +81,12 @@ CUTOFFS = {
     # 2026-10-21 16:58 UTC and 01:55 UTC).
     "training": datetime(2026, 10, 21, 18, 45, tzinfo=timezone.utc),
     # The deployment predictions that the validation figures score. The v3
-    # predictions of the MICrONS test cohort were complete at this time
-    # (run-20261028-054619-716f, last data commit 2026-10-28 08:03 UTC).
-    "validation": datetime(2026, 10, 28, 8, 10, tzinfo=timezone.utc),
+    # predictions of the MICrONS test cohort (run-20261028-054619-716f, last data
+    # commit 2026-10-28 08:03 UTC) and of the H01 test cohort
+    # (run-20261028-164729-6ba4, last data commit 17:40 UTC) were complete at this
+    # time. The full run skips the finished test-cohort roots, so it adds no
+    # attempts for the MICrONS validation cells before it.
+    "validation": datetime(2026, 10, 28, 17, 50, tzinfo=timezone.utc),
     # The spine structures that train the unitary-spine model. The v3 structures
     # of the MICrONS test cohort were complete at this time (last data commit
     # 2026-10-28 08:03 UTC).
