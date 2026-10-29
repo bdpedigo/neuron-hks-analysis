@@ -10,10 +10,12 @@ planned table.
 It writes figures only, no glued variables.
 """
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import seaborn as sns
+from scipy import stats
 
 from analysis import (
     CELL_TYPE_CATEGORIES,
@@ -345,6 +347,102 @@ for xpos, label, ha in [(0.1, "Inhibitory", "left"), (0.9, "Excitatory", "right"
     )
 axs[-1].set_xlabel("Proportion of synapses on spines")
 save_matplotlib_figure(fig, "input_spine_proportion_by_broad_type", subfolder=SUBFOLDER)
+
+# %% WITHIN-TYPE PER-CELL AGREEMENT AND TRENDS, 23P AND 4P
+# HKS on the NEURD-labeled synapses against NEURD, so a difference is label
+# disagreement, not coverage.
+
+TREND_TYPES = ["23P", "4P"]
+MATCHED = "HKS on NEURD-labeled"
+COVARIATES = {
+    "n_inputs": "Input synapses",
+    "nuc_volume": "Nucleus volume (µm³)",
+    "depth_um": "Soma depth (µm)",
+}
+
+cell_covariates = (
+    inputs.group_by("post_pt_root_id")
+    .agg(n_inputs=pl.len())
+    .join(
+        Tables["cell_info"]
+        .lazy()
+        .select(
+            pl.col("pt_root_id").alias("post_pt_root_id"),
+            "nuc_volume",
+            pl.col("pt_position_um_y").alias("depth_um"),
+        )
+        .collect(),
+        on="post_pt_root_id",
+        how="left",
+    )
+)
+trend_cells = (
+    paired.filter(pl.col("post_cell_type").cast(pl.String).is_in(TREND_TYPES))
+    .drop_nulls([MATCHED, "NEURD"])
+    .join(cell_covariates, on="post_pt_root_id", how="left")
+    .to_pandas()
+)
+
+
+def spearman_label(x, y) -> str:
+    rho, p = stats.spearmanr(x, y, nan_policy="omit")
+    return f"ρ = {rho:.2f}, p = {p:.1g}"
+
+
+fig, axs = plt.subplots(1, len(TREND_TYPES), figsize=(10, 5), sharex=True, sharey=True)
+for ax, cell_type in zip(axs, TREND_TYPES):
+    cells = trend_cells.query("post_cell_type == @cell_type")
+    sns.scatterplot(
+        data=cells, x=MATCHED, y="NEURD", color=CELL_TYPE_PALETTE[cell_type], s=10, linewidth=0, ax=ax
+    )
+    ax.plot([0, 1], [0, 1], color="grey", linestyle="--", linewidth=1, zorder=-1)
+    ax.set(
+        title=f"{cell_type_mapper(cell_type)} ({len(cells)} cells)\n{spearman_label(cells[MATCHED], cells['NEURD'])}",
+        xlabel="Spine proportion,\nHKS on NEURD-labeled",
+        ylabel="Spine proportion, NEURD",
+        xlim=(0.25, 0.9),
+        ylim=(0.25, 0.9),
+        aspect="equal",
+    )
+save_matplotlib_figure(fig, "input_spine_proportion_within_type", subfolder=SUBFOLDER)
+
+fig, axs = plt.subplots(
+    len(TREND_TYPES), len(COVARIATES), figsize=(15, 10), sharey=True, layout="constrained"
+)
+for row, cell_type in enumerate(TREND_TYPES):
+    cells = trend_cells.query("post_cell_type == @cell_type")
+    for col, (covariate, xlabel) in enumerate(COVARIATES.items()):
+        ax = axs[row, col]
+        for version in [MATCHED, "NEURD"]:
+            sns.regplot(
+                data=cells,
+                x=covariate,
+                y=version,
+                logx=covariate == "n_inputs",
+                ci=None,
+                color=VERSION_PALETTE[version],
+                scatter_kws=dict(s=6, edgecolor="none", alpha=0.6),
+                line_kws=dict(linewidth=2),
+                ax=ax,
+            )
+        if covariate == "n_inputs":
+            ax.set_xscale("log")
+            ax.xaxis.set_major_formatter(mpl.ticker.StrMethodFormatter("{x:,.0f}"))
+            ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+            ax.set_xticks([1000, 2000, 4000, 8000])
+        stats_lines = [
+            f"{'HKS*' if version == MATCHED else version}: "
+            f"{spearman_label(cells[covariate], cells[version])}"
+            for version in [MATCHED, "NEURD"]
+        ]
+        ax.set_title("\n".join(stats_lines), fontsize="small")
+        ax.set(xlabel=xlabel, ylabel=f"{cell_type_mapper(cell_type)}\nspine proportion" if col == 0 else "")
+handles = [
+    mpl.lines.Line2D([], [], color=VERSION_PALETTE[version], linewidth=2, label=label)
+    for version, label in [(MATCHED, "HKS on NEURD-labeled (HKS*)"), ("NEURD", "NEURD")]
+]
+fig.legend(handles=handles, loc="outside upper center", ncols=2, frameon=False)
+save_matplotlib_figure(fig, "input_spine_proportion_trends_within_type", subfolder=SUBFOLDER)
 
 # %% COLUMN-TO-COLUMN CELL TYPE PAIR PROPORTIONS
 
