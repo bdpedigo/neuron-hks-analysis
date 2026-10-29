@@ -310,6 +310,42 @@ for ax, version in zip(axs, ["HKS", "HKS on NEURD-labeled"]):
     ax.set(xlabel=f"Spine proportion,\n{version}", ylabel="Spine proportion, NEURD")
 save_matplotlib_figure(fig, "input_spine_proportion_hks_vs_neurd", subfolder=SUBFOLDER)
 
+# %% PER-CELL INPUT SPINE PROPORTION OF E AND I CELLS, PER LABELING
+# The lower panel of Fig 4A left (scripts/census/input_compartments.py), once per
+# labeling.
+
+broad_types = inputs.select("post_pt_root_id", "post_broad_type").unique()
+assert broad_types["post_pt_root_id"].is_unique().all()
+broad_props = input_props.join(broad_types, on="post_pt_root_id").to_pandas()
+
+fig, axs = plt.subplots(
+    len(VERSIONS), 1, figsize=(5.31, 8.5), dpi=300, sharex=True, layout="constrained"
+)
+for ax, version in zip(axs, VERSIONS):
+    sns.histplot(
+        data=broad_props.query("version == @version"),
+        x="spine",
+        hue="post_broad_type",
+        hue_order=["inhibitory", "excitatory"],
+        palette=CELL_TYPE_PALETTE,
+        bins=np.linspace(0, 1, 21),
+        stat="density",
+        element="step",
+        common_norm=False,
+        legend=False,
+        linewidth=0,
+        kde=True,
+        ax=ax,
+    )
+    ax.set(title=version, ylabel="Normalized\ncell density", yticks=[], xlabel="")
+    ax.spines[["top", "right", "left"]].set_visible(False)
+for xpos, label, ha in [(0.1, "Inhibitory", "left"), (0.9, "Excitatory", "right")]:
+    axs[0].text(
+        xpos, 0.8, label, transform=axs[0].transAxes, color=CELL_TYPE_PALETTE[label.lower()], ha=ha
+    )
+axs[-1].set_xlabel("Proportion of synapses on spines")
+save_matplotlib_figure(fig, "input_spine_proportion_by_broad_type", subfolder=SUBFOLDER)
+
 # %% COLUMN-TO-COLUMN CELL TYPE PAIR PROPORTIONS
 
 column_column = inputs.filter(pl.col("pre_pt_root_id").is_in(column_root_ids()))
