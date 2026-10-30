@@ -20,7 +20,7 @@ from tqdm.auto import tqdm
 from ..io import param_hash
 from ..sources import DATASTACK, cutoff, deployment_path, pin_params
 from .catalog import Tables
-from .deployment import latest_attempts, scan_roots
+from .deployment import query_latest_attempts, scan_roots
 from .roots import NO_DOMAIN, _vertex_domain, fetch_mesh, mesh_get_kwargs
 
 # The parameters of the deployment's `synapse_mapping` step (job spec params).
@@ -85,7 +85,7 @@ def map_points_to_domains(
     meshes are read from and written to it.
     """
     root_ids = points["root_id"].unique().sort().to_list()
-    (vertex_lf,) = latest_attempts(
+    (vertex_lf,) = query_latest_attempts(
         [scan_roots(deployment_path("vertex_domains", datastack), root_ids, as_of=as_of)]
     )
     vertex_domains = vertex_lf.select("root_id", "mesh_index", "domain_id").collect(engine="streaming")
@@ -111,7 +111,7 @@ def point_features(points: pl.DataFrame, *, as_of: datetime, mesh_cache: Optiona
     `domain_features` row of each domain."""
     mapped = map_points_to_domains(points, as_of=as_of, mesh_cache=mesh_cache)
     root_ids = mapped["root_id"].unique().to_list()
-    (domain_lf,) = latest_attempts(
+    (domain_lf,) = query_latest_attempts(
         [scan_roots(deployment_path("domain_features", DATASTACK), root_ids, as_of=as_of)]
     )
     domain_rows = domain_lf.join(

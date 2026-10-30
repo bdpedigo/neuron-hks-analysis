@@ -4,30 +4,6 @@ that the catalog can list them. Move a table to its own module when it is built.
 from .catalog import Tables
 
 Tables.register(
-    "synapse_census_features",
-    description=(
-        "One row per mapped synapse onto a neuron root of the full run, with no "
-        "autapses: `synapse_id`, `post_pt_root_id`, the domain label as `tag`, and "
-        "the `structure_id` of its spine (null if it is on no spine). An unmapped "
-        "synapse has no row. It holds only the run features: join it to "
-        "`microns_synapses` on `synapse_id`. It is in the same 256 buckets as "
-        "`microns_synapses`, and one scan of the deployment tables writes it with "
-        "`spine_census_features`."
-    ),
-)
-Tables.register(
-    "spine_census_features",
-    description=(
-        "One row per spine structure with at least one synapse (no autapses) on a "
-        "neuron root of the full run, keyed by (`root_id`, `structure_id`): "
-        "`size_nm3`, `area_nm2`, `n_synapses`, `n_pre_root_ids`, "
-        "`posterior_unitary`, `unitary_pred_label` and `is_multi`. No census table "
-        "reads the other morphometry or the spectral features, so the table leaves "
-        "them out, and the scan does not read `structure_features`. The same scan "
-        "writes it with `synapse_census_features`."
-    ),
-)
-Tables.register(
     "proofread_pre_synapses",
     description=(
         "One row per synapse from a proofread cell onto any root, with no "

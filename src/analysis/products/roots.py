@@ -41,7 +41,7 @@ from ..sources import (
     pin_params,
 )
 from .catalog import Tables
-from .deployment import delta_table, latest_attempts, scan_roots
+from .deployment import delta_table, query_latest_attempts, scan_roots
 from .features import add_distance_to_nucleus
 from .synapses import scan_post_synapses
 
@@ -160,7 +160,7 @@ def fetch_mesh(root_id: int, datastack: str, n_tries: int = 3) -> tuple[np.ndarr
 def fetch_root_tables(root_id: int, datastack: str) -> dict[str, pl.DataFrame]:
     """The rows of `root_id` in each of `ROOT_PRODUCTS`, at `ROOT_CUTOFF`."""
     as_of = cutoff(ROOT_CUTOFF)
-    scans = latest_attempts(
+    scans = query_latest_attempts(
         [
             scan_roots(deployment_path(product, datastack), [root_id], as_of=as_of)
             for product in ROOT_PRODUCTS

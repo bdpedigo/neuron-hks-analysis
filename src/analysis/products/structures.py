@@ -9,7 +9,7 @@ from datetime import datetime
 import polars as pl
 
 from ..sources import DATASTACK, deployment_path
-from .deployment import latest_attempts, scan_roots
+from .deployment import query_latest_attempts, scan_roots
 from .features import synapse_vertex_join
 from .synapses import scan_post_synapses
 
@@ -37,7 +37,7 @@ def read_structures(
 ) -> pl.DataFrame:
     """`structure_morphometry` joined to `structure_features`, one row per structure
     of `root_ids` at `as_of`."""
-    morphometry, features = latest_attempts(
+    morphometry, features = query_latest_attempts(
         [
             scan_roots(deployment_path(product, datastack), root_ids, as_of=as_of)
             for product in ("structure_morphometry", "structure_features")
@@ -65,7 +65,7 @@ def read_structure_predictions(
     """`structure_predictions` (the unitary-spine model), one row per structure of
     `root_ids` at `as_of`, with `pred_label` and `posterior_entropy` renamed as in
     `UNITARY_RENAMES`."""
-    (predictions,) = latest_attempts(
+    (predictions,) = query_latest_attempts(
         [scan_roots(deployment_path("structure_predictions", datastack), root_ids, as_of=as_of)]
     )
     return (

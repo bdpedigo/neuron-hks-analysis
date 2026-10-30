@@ -31,7 +31,7 @@ from upath import UPath
 from ..io import TABLE_PATH
 from ..sources import MICRONS_SYNAPSES_PATH, VERSION
 from .catalog import Tables
-from .partitions import hash_partition
+from .partitions import LAYOUT_PATH, hash_partition
 
 COLUMNS = [
     "id",
@@ -44,7 +44,6 @@ COLUMNS = [
 ]
 N_BUCKETS = 256
 BUCKET_COLUMN = "post_pt_root_id_bucket"
-LAYOUT_PATH = "_info/layout.json"
 # Source files read and written as one batch, about 1M rows each.
 BATCH_FILES = 16
 

@@ -12,7 +12,7 @@ from ..sources import DATASTACK, cutoff, deployment_path, pin_params
 from . import labels  # noqa: F401 -- registers "labels", whose cache key P2 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", which the training view reads
 from .catalog import Tables
-from .deployment import latest_attempts, scan_roots
+from .deployment import query_latest_attempts, scan_roots
 from .partitions import hash_partition
 
 
@@ -32,7 +32,7 @@ def synapse_vertex_join(
     a root that `vertex_product` does not hold has a null `column`.
     """
     root_ids = synapses["root_id"].unique().to_list()
-    mapping_lf, vertices_lf = latest_attempts(
+    mapping_lf, vertices_lf = query_latest_attempts(
         [
             scan_roots(deployment_path("synapse_mapping", datastack), root_ids, as_of=as_of),
             scan_roots(deployment_path(vertex_product, datastack), root_ids, as_of=as_of),
@@ -77,7 +77,7 @@ def synapse_domain_join(
     synapse_domains = synapse_vertex_join(
         synapses, "vertex_domains", "domain_id", as_of=as_of, datastack=datastack
     )
-    (domain_rows_lf,) = latest_attempts(
+    (domain_rows_lf,) = query_latest_attempts(
         [scan_roots(deployment_path(domain_product, datastack), root_ids, as_of=as_of)]
     )
     domain_rows = (
