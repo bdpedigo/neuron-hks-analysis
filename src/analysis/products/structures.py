@@ -125,7 +125,11 @@ def _add_is_multi(structures: pl.DataFrame) -> pl.DataFrame:
 def _read_synapse_structure(
     root_ids: list[int], *, as_of: datetime
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    synapses = _root_synapses(root_ids, as_of=as_of)
+    # NOTE: autapses are dropped here, not in `_root_synapses`, so the training
+    # spines of the unitary model keep the counts they were trained on.
+    synapses = _root_synapses(root_ids, as_of=as_of).filter(
+        pl.col("pre_pt_root_id") != pl.col("root_id")
+    )
     # NOTE: the full join keeps a structure with synapses but no prediction (its
     # root is not predicted yet) and a predicted structure with no synapse.
     structures = (
@@ -149,7 +153,7 @@ def spine_structures(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
 
     - `n_synapses` and `n_pre_root_ids`: the synapses on the structure and their
       distinct presynaptic roots, from every synapse in the synapse table (v1822)
-      on the root, not from a selection.
+      on the root but the autapses, not from a selection.
     - `posterior_unitary`, `posterior_not_unitary`, `unitary_pred_label` and
       `unitary_posterior_entropy`: the unitary-spine model, null for a structure
       with no prediction.
@@ -166,7 +170,8 @@ def _join_spines(structures: pl.DataFrame, spines: pl.DataFrame) -> pl.DataFrame
     `spine_structures`) on (`root_id`, `structure_id`).
 
     Both have `n_synapses`. The one from `spines` stays, because it comes from the
-    same synapse read as `n_pre_root_ids`.
+    same synapse read as `n_pre_root_ids`. It has no autapses, but the deployment
+    count has them, so it can be smaller.
     """
     key = ["root_id", "structure_id"]
     joined = structures.join(spines, on=key, how="full", coalesce=True, suffix="_spines")
@@ -174,8 +179,8 @@ def _join_spines(structures: pl.DataFrame, spines: pl.DataFrame) -> pl.DataFrame
         "spine_structures holds a structure with no morphometry"
     )
     both = joined.drop_nulls(["n_synapses", "n_synapses_spines"])
-    assert (both["n_synapses"] == both["n_synapses_spines"]).all(), (
-        "structure_morphometry and the synapse table count different synapses"
+    assert (both["n_synapses"] >= both["n_synapses_spines"]).all(), (
+        "the synapse table counts more synapses than structure_morphometry"
     )
     return (
         joined.drop("n_synapses")

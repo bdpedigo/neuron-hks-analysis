@@ -406,22 +406,32 @@ for ax, cell_type in zip(axs, TREND_TYPES):
     )
 save_matplotlib_figure(fig, "input_spine_proportion_within_type", subfolder=SUBFOLDER)
 
+# HKS on all synapses keeps the cells that NEURD does not label. Each labeling
+# uses the cells that have a value for it.
+TREND_VERSIONS = ["HKS", MATCHED, "NEURD"]
+TREND_NAMES = {"HKS": "HKS", MATCHED: "HKS*", "NEURD": "NEURD"}
+trend_all = (
+    paired.filter(pl.col("post_cell_type").cast(pl.String).is_in(TREND_TYPES))
+    .join(cell_covariates, on="post_pt_root_id", how="left")
+    .to_pandas()
+)
+
 fig, axs = plt.subplots(
-    len(TREND_TYPES), len(COVARIATES), figsize=(15, 10), sharey=True, layout="constrained"
+    len(TREND_TYPES), len(COVARIATES), figsize=(15, 10.5), sharey=True, layout="constrained"
 )
 for row, cell_type in enumerate(TREND_TYPES):
-    cells = trend_cells.query("post_cell_type == @cell_type")
+    cells = trend_all.query("post_cell_type == @cell_type")
     for col, (covariate, xlabel) in enumerate(COVARIATES.items()):
         ax = axs[row, col]
-        for version in [MATCHED, "NEURD"]:
+        for version in TREND_VERSIONS:
             sns.regplot(
-                data=cells,
+                data=cells.dropna(subset=[version]),
                 x=covariate,
                 y=version,
                 logx=covariate == "n_inputs",
                 ci=None,
                 color=VERSION_PALETTE[version],
-                scatter_kws=dict(s=6, edgecolor="none", alpha=0.6),
+                scatter_kws=dict(s=6, edgecolor="none", alpha=0.4),
                 line_kws=dict(linewidth=2),
                 ax=ax,
             )
@@ -431,17 +441,21 @@ for row, cell_type in enumerate(TREND_TYPES):
             ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
             ax.set_xticks([1000, 2000, 4000, 8000])
         stats_lines = [
-            f"{'HKS*' if version == MATCHED else version}: "
+            f"{TREND_NAMES[version]} ({cells[version].notna().sum()}): "
             f"{spearman_label(cells[covariate], cells[version])}"
-            for version in [MATCHED, "NEURD"]
+            for version in TREND_VERSIONS
         ]
         ax.set_title("\n".join(stats_lines), fontsize="small")
         ax.set(xlabel=xlabel, ylabel=f"{cell_type_mapper(cell_type)}\nspine proportion" if col == 0 else "")
 handles = [
     mpl.lines.Line2D([], [], color=VERSION_PALETTE[version], linewidth=2, label=label)
-    for version, label in [(MATCHED, "HKS on NEURD-labeled (HKS*)"), ("NEURD", "NEURD")]
+    for version, label in [
+        ("HKS", "HKS, all synapses"),
+        (MATCHED, "HKS on NEURD-labeled (HKS*)"),
+        ("NEURD", "NEURD"),
+    ]
 ]
-fig.legend(handles=handles, loc="outside upper center", ncols=2, frameon=False)
+fig.legend(handles=handles, loc="outside upper center", ncols=3, frameon=False)
 save_matplotlib_figure(fig, "input_spine_proportion_trends_within_type", subfolder=SUBFOLDER)
 
 # %% COLUMN-TO-COLUMN CELL TYPE PAIR PROPORTIONS
@@ -489,6 +503,187 @@ for ax in axs[:, 0]:
     ax.set_yticks(np.arange(len(CELL_TYPES)) + 0.5)
     ax.set_yticklabels([cell_type_mapper(c) for c in CELL_TYPES], rotation=0)
 save_matplotlib_figure(fig, "column_pair_proportions", subfolder=SUBFOLDER)
+
+# %% COMPOSITE PANELS
+# Small versions for the NEURD composite figure. Panel A is the macro F1 bar plot
+# of scripts/validation/compare_to_neurd.py, so these follow its style: NEURD in
+# light grey, HKS in black, and the E and I cell types on shaded backgrounds.
+
+METHOD_COLORS = {"NEURD": "lightgrey", "HKS": "black"}
+BAR_CELL_TYPES = [c for c in CELL_TYPE_CATEGORIES[1:-1]]
+
+
+def shade_broad_types(ax, n_excitatory: int, n_types: int):
+    ax.autoscale(False)
+    ax.fill_between(
+        [-1, n_excitatory - 0.5], 0, 1, color=CELL_TYPE_PALETTE["Excitatory"], alpha=0.2, zorder=-1
+    )
+    ax.fill_between(
+        [n_excitatory - 0.5, n_types], 0, 1, color=CELL_TYPE_PALETTE["Inhibitory"], alpha=0.2, zorder=-1
+    )
+    ax.text(0.0, 1.0, "Excitatory", color=CELL_TYPE_PALETTE["Excitatory"], transform=ax.transAxes, va="bottom")
+    ax.text(
+        n_excitatory / n_types, 1.0, "Inhibitory", color=CELL_TYPE_PALETTE["Inhibitory"], transform=ax.transAxes, va="bottom"
+    )
+
+
+# B: the share of the column cells of each type with at least one labeled input.
+cell_labeled = (
+    inputs.group_by("post_pt_root_id", "post_cell_type")
+    .agg(
+        HKS=pl.col("hks_label").is_not_null().any(),
+        NEURD=pl.col("neurd_label").is_not_null().any(),
+    )
+    .unpivot(index=["post_pt_root_id", "post_cell_type"], variable_name="method", value_name="labeled")
+    .group_by("post_cell_type", "method")
+    .agg(n_cells=pl.len(), fraction=pl.col("labeled").mean())
+    .with_columns(pl.col("post_cell_type").cast(pl.String))
+)
+print(cell_labeled.sort("post_cell_type", "method"))
+
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(
+    data=cell_labeled.to_pandas(),
+    x="post_cell_type",
+    order=BAR_CELL_TYPES,
+    y="fraction",
+    hue="method",
+    hue_order=["NEURD", "HKS"],
+    palette=METHOD_COLORS,
+    legend=False,
+    ax=ax,
+)
+shade_broad_types(ax, n_excitatory=7, n_types=len(BAR_CELL_TYPES))
+ax.set_xticks(range(len(BAR_CELL_TYPES)), [cell_type_mapper(c) for c in BAR_CELL_TYPES], rotation=45, ha="right")
+ax.set(ylim=(0, 1), xlabel="Cell Type", ylabel="Proportion of cells\nwith labeled inputs")
+save_matplotlib_figure(fig, "composite_cell_coverage", subfolder=SUBFOLDER)
+
+# C: the per-cell input spine proportion, HKS on the NEURD-labeled synapses
+# against NEURD.
+fig, ax = plt.subplots(figsize=(6, 6))
+sns.scatterplot(
+    data=paired.to_pandas(),
+    x=MATCHED,
+    y="NEURD",
+    hue="post_cell_type",
+    palette=CELL_TYPE_PALETTE,
+    s=8,
+    linewidth=0,
+    legend=False,
+    ax=ax,
+)
+ax.plot([0, 1], [0, 1], color="grey", linestyle="--", linewidth=1, zorder=-1)
+ax.set(
+    xlim=(0, 1),
+    ylim=(0, 1),
+    aspect="equal",
+    xlabel="P(spine input), HKS*",
+    ylabel="P(spine input), NEURD",
+)
+save_matplotlib_figure(fig, "composite_spine_proportion_scatter", subfolder=SUBFOLDER)
+
+# D (draft): Spearman rho of the per-cell spine proportion against each covariate,
+# with 95% bootstrap intervals, for 23P and 4P.
+
+
+def bootstrap_rho(x, y, n_boot: int = 1000, seed: int = 0):
+    mask = ~(np.isnan(x) | np.isnan(y))
+    x, y = x[mask], y[mask]
+    rng = np.random.default_rng(seed)
+    draws = [
+        stats.spearmanr(x[idx], y[idx])[0]
+        for idx in (rng.integers(0, len(x), len(x)) for _ in range(n_boot))
+    ]
+    return stats.spearmanr(x, y)[0], *np.quantile(draws, [0.025, 0.975])
+
+
+rho_rows = []
+for cell_type in TREND_TYPES:
+    cells = trend_all.query("post_cell_type == @cell_type")
+    for covariate, covariate_label in COVARIATES.items():
+        for version in TREND_VERSIONS:
+            rho, lo, hi = bootstrap_rho(cells[covariate].to_numpy(float), cells[version].to_numpy(float))
+            rho_rows.append(
+                dict(
+                    row=f"{cell_type_mapper(cell_type)}, {covariate_label.split(' (')[0].lower()}",
+                    version=version,
+                    rho=rho,
+                    lo=lo,
+                    hi=hi,
+                )
+            )
+rho_table = pl.DataFrame(rho_rows)
+rows = list(dict.fromkeys(rho_table["row"]))
+offsets = dict(zip(TREND_VERSIONS, [-0.22, 0.0, 0.22]))
+fig, ax = plt.subplots(figsize=(6, 6))
+for version in TREND_VERSIONS:
+    sub = rho_table.filter(pl.col("version") == version)
+    y = np.array([rows.index(r) for r in sub["row"]]) + offsets[version]
+    ax.errorbar(
+        sub["rho"],
+        y,
+        xerr=[sub["rho"] - sub["lo"], sub["hi"] - sub["rho"]],
+        fmt="o",
+        color=VERSION_PALETTE[version],
+        markersize=6,
+        capsize=0,
+        label=TREND_NAMES[version],
+    )
+ax.axvline(0, color="grey", linewidth=1, zorder=-1)
+ax.set_yticks(range(len(rows)), rows)
+ax.invert_yaxis()
+ax.set(xlabel="Spearman ρ with P(spine input)", xlim=(-0.6, 0.8))
+ax.legend(frameon=False, loc="lower right", fontsize="small")
+save_matplotlib_figure(fig, "composite_trend_rho", subfolder=SUBFOLDER)
+
+# D, wide: the same rho for every cell type, in the order of panels A and B, one
+# row per covariate. Depth is left out.
+WIDE_COVARIATES = ["n_inputs", "nuc_volume"]
+type_cells = paired.join(cell_covariates, on="post_pt_root_id", how="left").to_pandas()
+wide_rows = []
+for cell_type in BAR_CELL_TYPES:
+    cells = type_cells.query("post_cell_type == @cell_type")
+    for covariate in WIDE_COVARIATES:
+        for version in TREND_VERSIONS:
+            rho, lo, hi = bootstrap_rho(cells[covariate].to_numpy(float), cells[version].to_numpy(float))
+            wide_rows.append(dict(cell_type=cell_type, covariate=covariate, version=version, rho=rho, lo=lo, hi=hi))
+wide_rho = pl.DataFrame(wide_rows)
+
+wide_offsets = dict(zip(TREND_VERSIONS, [-0.25, 0.0, 0.25]))
+ROW_LABELS = {"n_inputs": "Inputs", "nuc_volume": "Nucleus\nvolume"}
+# The size of panel D in scripts/composites/neurd_comparison.py (PanelMosaic
+# get_axis_sizes), so the panel is not scaled.
+fig, axs = plt.subplots(
+    len(WIDE_COVARIATES), 1, figsize=(13.25, 6.12), sharex=True, sharey=True, layout="constrained"
+)
+for ax, covariate in zip(axs, WIDE_COVARIATES):
+    ax.axvspan(-0.5, 6.5, color=CELL_TYPE_PALETTE["Excitatory"], alpha=0.2, zorder=-2, linewidth=0)
+    ax.axvspan(6.5, len(BAR_CELL_TYPES) - 0.5, color=CELL_TYPE_PALETTE["Inhibitory"], alpha=0.2, zorder=-2, linewidth=0)
+    ax.axhline(0, color="grey", linewidth=1, zorder=-1)
+    for version in TREND_VERSIONS:
+        sub = wide_rho.filter(pl.col("covariate") == covariate, pl.col("version") == version)
+        x = np.array([BAR_CELL_TYPES.index(c) for c in sub["cell_type"]]) + wide_offsets[version]
+        ax.errorbar(
+            x,
+            sub["rho"],
+            yerr=[sub["rho"] - sub["lo"], sub["hi"] - sub["rho"]],
+            fmt="o",
+            color=VERSION_PALETTE[version],
+            markersize=4,
+            capsize=0,
+            linewidth=1.5,
+            label=TREND_NAMES[version],
+        )
+    ax.set(ylim=(-1, 1), yticks=[-1, 0, 1], ylabel=ROW_LABELS[covariate])
+axs[0].text(0.0, 1.0, "Excitatory", color=CELL_TYPE_PALETTE["Excitatory"], transform=axs[0].transAxes, va="bottom")
+axs[0].text(
+    7 / len(BAR_CELL_TYPES), 1.0, "Inhibitory", color=CELL_TYPE_PALETTE["Inhibitory"], transform=axs[0].transAxes, va="bottom"
+)
+fig.supylabel("Spearman ρ with P(spine input)", fontsize="medium")
+axs[-1].set_xlim(-0.5, len(BAR_CELL_TYPES) - 0.5)
+axs[-1].set_xticks(range(len(BAR_CELL_TYPES)), [cell_type_mapper(c) for c in BAR_CELL_TYPES], rotation=45, ha="right")
+axs[-1].set_xlabel("Cell Type")
+save_matplotlib_figure(fig, "composite_trend_rho_by_cell_type", subfolder=SUBFOLDER, bbox_inches=None)
 
 # %% OUTPUTS OF THE PROOFREAD CELLS
 

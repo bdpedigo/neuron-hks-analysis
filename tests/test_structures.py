@@ -44,10 +44,11 @@ def test_join_spines_keeps_every_structure_and_one_synapse_count():
             "root_id": [10, 20, 20],
             "structure_id": [1, 1, 2],
             "size_nm3": [1.0, 2.0, 3.0],
-            "n_synapses": [2, 1, 0],
+            "n_synapses": [3, 1, 0],
         }
     )
-    # Root 20's structure 2 has no synapse, so its counts are 0.
+    # Root 20's structure 2 has no synapse, so its counts are 0. Root 10's
+    # structure 1 has an autapse, which only the deployment count holds.
     spines = pl.DataFrame(
         {
             "root_id": [10, 20, 20],

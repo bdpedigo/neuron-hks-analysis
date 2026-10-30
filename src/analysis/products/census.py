@@ -188,8 +188,7 @@ def read_post_synapses(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
     It reads every deployment table at `as_of`.
     """
     # NOTE: `synapse_structure` reads the synapse table a second time, but only
-    # three columns, and it counts the presynaptic roots of a structure from every
-    # synapse on the root, autapses too.
+    # three columns.
     synapses = _drop_autapses(_read_post_synapse_rows(root_ids))
     posteriors = synapse_posteriors(
         synapses.select("synapse_id", pl.col("post_pt_root_id").alias("root_id")), as_of=as_of
@@ -213,6 +212,56 @@ def read_post_synapses(root_ids: list[int], *, as_of: datetime) -> pl.DataFrame:
         .pipe(_add_cell_info, Tables["cell_info"].collect())
         .pipe(_add_positions, Tables["root_nuclei"].lazy())
         .pipe(_add_tag_detailed)
+        .sort("post_pt_root_id", "synapse_id")
+    )
+
+
+# The spine columns that each synapse row carries. The spine table keeps the rest.
+SPINE_SYNAPSE_COLUMNS = [
+    "n_synapses",
+    "n_pre_root_ids",
+    "unitary_pred_label",
+    "is_multi",
+    "size_nm3",
+    "area_nm2",
+]
+
+
+def join_census_features(
+    synapses: pl.LazyFrame, features: pl.LazyFrame, spines: pl.LazyFrame
+) -> pl.LazyFrame:
+    """`synapses` (rows of `microns_synapses`, with `id`) with no autapses, and with
+    the run features of each synapse:
+
+    - `tag` and `structure_id` from `features` (`synapse_census_features`). A
+      synapse with no row there (unmapped) has null values.
+    - The `SPINE_SYNAPSE_COLUMNS` of its spine from `spines`, keyed by (`root_id`,
+      `structure_id`), with a `spine_` prefix.
+    - `tag_detailed`: see `_add_tag_detailed`.
+    """
+    spines = spines.select(
+        pl.col("root_id").alias("post_pt_root_id"),
+        "structure_id",
+        *[pl.col(name).alias(f"spine_{name}") for name in SPINE_SYNAPSE_COLUMNS],
+    )
+    return (
+        synapses.rename({"id": "synapse_id"})
+        .pipe(_drop_autapses)
+        .join(features.select("synapse_id", "tag", "structure_id"), on="synapse_id", how="left")
+        .with_columns(pl.col("tag").cast(pl.Enum(LABEL_CATEGORIES)))
+        .join(spines, on=["post_pt_root_id", "structure_id"], how="left")
+        .pipe(_add_tag_detailed)
+    )
+
+
+def annotate_synapses(synapses: pl.DataFrame) -> pl.DataFrame:
+    """`synapses` (from `join_census_features`) with the skeleton compartments and
+    distances, the cell info and the nucleus distances of each side. See
+    `_add_skeleton_sides`, `_add_cell_info` and `_add_positions`."""
+    return (
+        synapses.pipe(_add_skeleton_sides, Tables["skeleton_synapse_features"].lazy())
+        .pipe(_add_cell_info, Tables["cell_info"].collect())
+        .pipe(_add_positions, Tables["root_nuclei"].lazy())
         .sort("post_pt_root_id", "synapse_id")
     )
 

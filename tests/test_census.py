@@ -10,6 +10,7 @@ from analysis.products.census import (
     _spine_columns,
     aggregate_post,
     aggregate_pre,
+    join_census_features,
 )
 
 
@@ -57,6 +58,45 @@ def test_spine_columns_prefix_all_but_the_keys():
         "spine_n_pre_root_ids",
         "spine_is_multi",
     ]
+
+
+def test_join_census_features():
+    synapses = pl.LazyFrame(
+        {
+            "id": [1, 2, 3, 4],
+            "pre_pt_root_id": [20, 30, 10, 20],
+            "post_pt_root_id": [10, 10, 10, 11],
+            "size": [5, 6, 7, 8],
+        }
+    )
+    # Synapse 2 is unmapped, and synapse 3 is an autapse. Synapse 4 is on root 11,
+    # and its structure ID 7 is a spine of root 10 only.
+    features = pl.LazyFrame(
+        {"synapse_id": [1, 3, 4], "tag": ["spine", "spine", "spine"], "structure_id": [7, 7, 7]}
+    )
+    spines = pl.LazyFrame(
+        {
+            "root_id": [10],
+            "structure_id": [7],
+            "n_synapses": [2],
+            "n_pre_root_ids": [2],
+            "unitary_pred_label": ["unitary"],
+            "is_multi": [True],
+            "size_nm3": [1.0],
+            "area_nm2": [2.0],
+            "neck_length_nm": [3.0],
+        }
+    )
+    joined = join_census_features(synapses, features, spines).collect().sort("synapse_id")
+    assert joined["synapse_id"].to_list() == [1, 2, 4]
+    assert joined["tag"].cast(pl.String).to_list() == ["spine", None, "spine"]
+    assert joined["spine_is_multi"].to_list() == [True, None, None]
+    assert joined["tag_detailed"].cast(pl.String).to_list() == [
+        "multi_spine",
+        None,
+        "single_spine",
+    ]
+    assert "spine_neck_length_nm" not in joined.columns
 
 
 def test_skeleton_sides_match_the_root_of_each_side():
