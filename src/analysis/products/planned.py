@@ -30,11 +30,15 @@ Tables.register(
 Tables.register(
     "proofread_pre_synapses",
     description=(
-        "One row per synapse from a proofread cell onto a neuron root, with the "
-        "columns of `column_post_synapses`. The distance to the post nucleus comes "
-        "from the nucleus position, because most targets have no skeleton. It "
-        "derives from `synapse_census_features` and `spine_census_features`. It "
-        "replaces the proofread half of the old `filtered_synapses`."
+        "One row per synapse from a proofread cell onto any root, with no "
+        "autapses, and with the columns of `column_post_synapses`. As in the old "
+        "`filtered_synapses`, the targets are not filtered. A target outside the "
+        "full run has null run features (`tag`, `structure_id`, `spine_*`), and a "
+        "target outside `cell_info` has null cell info. The distance to the post "
+        "nucleus comes from the nucleus position, because most targets have no "
+        "skeleton. It derives from `microns_synapses`, `synapse_census_features` and "
+        "`spine_census_features`. It replaces the proofread half of the old "
+        "`filtered_synapses`."
     ),
 )
 Tables.register(

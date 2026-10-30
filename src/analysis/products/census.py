@@ -42,11 +42,15 @@ def column_root_ids() -> list[int]:
 # proofread axon reaches, but 5C left and 5E left kept only the column cells
 # (`scripts/stat_summaries.py`, the map of `post_broad_type`). Revisit this scope
 # with the full-run tables: a wider table is another call of `read_spines`.
+# NOTE: the old table held only the spines with a spine-tagged synapse. This one
+# holds every structure, so 1,848,798 of its 4,315,702 rows have no synapse (user
+# decision, 2026-10-30). 5C left and 5E left inner-join it to the spine synapses,
+# so they read the same spines as before.
 Tables.register(
     "column_spines",
     description=(
         "One row per spine structure on a column cell, keyed by (`root_id`, "
-        "`structure_id`). It holds the morphometry and spectral features, the "
+        "`structure_id`), with or without a synapse. It holds the morphometry and spectral features, the "
         "synapse and presynaptic root counts, the unitary-spine posteriors and "
         "`is_multi`. Read at the `test_census` cutoff. It replaces the old "
         "`filtered_spine_info`."
@@ -134,6 +138,11 @@ def _add_positions(synapses: pl.DataFrame, nucleus_points: pl.LazyFrame) -> pl.D
 
     The distance is null for a root with no nucleus.
     """
+    # NOTE: the old tables (meshrep `tools/make_mega_tables.py`) measured to the
+    # soma point in `cell_info`, so a root that `cell_info` drops, such as a root
+    # listed twice, had NaN. Here a root with several nuclei, such as a merge, gets
+    # the distance to the nearest one. This is the rule of `distance_to_nucleus`
+    # in the domain model (user decision, 2026-10-30).
     nm = [f"_ctr_nm_{c}" for c in "xyz"]
     lf = synapses.lazy().with_columns(
         (pl.col(f"ctr_pt_position_{c}") * resolution).alias(name)
