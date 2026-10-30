@@ -97,6 +97,14 @@ CUTOFFS = {
     # 08:03 UTC. The full run skips these roots, and its first unitary attempt is
     # at 19:43 UTC. The full run adds a "census" cutoff.
     "test_census": datetime(2026, 10, 28, 19, 20, tzinfo=timezone.utc),
+    # The census products on the full run (ssa-backlog TASK-49): every step on the
+    # 75,380 neuron roots, with ssa_model_full_v3 and unitary_hks_v3. Attempts to
+    # 2026-10-29 21:09:10 UTC, last data commit 21:12 UTC. 75,378 roots are done.
+    # 864691136992208021 and 864691135727459903 were killed at the 16.5 GiB memory
+    # budget in condensed_spectral, so they have no rows. The tables also hold
+    # the test-cohort roots and about 5,600 non-neuron roots of the first full-run
+    # attempts (run-20261028-095858-243c and run-20261028-140637-c62c).
+    "census": datetime(2026, 10, 29, 21, 20, tzinfo=timezone.utc),
     # The features of the point labels (`labeled_point_features`). The deployment
     # ran 6 roots of the CAVE point labels that the test cohort did not hold
     # (meshmash-deployment jobs/point_label_roots, last data commit 2026-10-28
