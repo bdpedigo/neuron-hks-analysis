@@ -27,11 +27,3 @@ Tables.register(
         "`post_synapse_aggregation`."
     ),
 )
-Tables.register(
-    "multi_spine_annotations",
-    description=(
-        "One row per hand-checked multi-input spine annotation on the column cells, "
-        "keyed by the synapse IDs on the spine. The old export is keyed by v1412 roots "
-        "and old spine IDs, which do not carry over."
-    ),
-)

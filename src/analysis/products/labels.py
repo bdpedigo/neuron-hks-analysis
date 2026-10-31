@@ -55,6 +55,22 @@ Tables.register(
 )
 
 
+MULTI_SPINE_LABELS_PATH = TABLE_PATH / "multi_spines" / "multi_spine_labels.parquet"
+
+Tables.register(
+    "multi_spine_labels",
+    description=(
+        "One row per multi-input spine on an excitatory cell whose presynaptic roots "
+        "are all proofread, at the `census` cutoff, with its synapse IDs and its hand "
+        "tags (`singlehead` = a true multi-input spine). `label_source` is `old` for a "
+        "tag carried from the v1412 states by an exact synapse match, and `new` for a "
+        "tag from the v1822 links (`scripts/multi_spines/`)."
+    ),
+    build=lambda: pl.scan_parquet(MULTI_SPINE_LABELS_PATH),
+    frozen=MULTI_SPINE_LABELS_PATH,
+)
+
+
 def fetch_validation_cells(client, version=VERSION) -> pl.DataFrame:
     """The validation cells (S9 nucleus IDs) with their root IDs at `version`."""
     nucleus_ids = Tables["validation_nucleus_ids"].collect()["nucleus_id"].unique()
