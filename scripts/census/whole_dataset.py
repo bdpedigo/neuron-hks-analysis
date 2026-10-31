@@ -27,10 +27,9 @@ from analysis import (
     save_matplotlib_figure,
     set_matplotlib_theme,
 )
-from analysis.census_inputs import glue, out_path, post_cells, pre_synapses
+from analysis.census_inputs import glue, out_path, post_cells
 from analysis.io import CELL_TYPE_CATEGORIES
 from analysis.plots import remapper
-from analysis.products.census import aggregate_pre
 
 SCRATCH = "--scratch" in sys.argv
 set_matplotlib_theme()
@@ -86,13 +85,9 @@ for broad_type in ["excitatory", "inhibitory"]:
     )
 
 # The input and output synapse counts of the proofread cells, by cell type.
-pre_totals = aggregate_pre(pre_synapses(SCRATCH)).select(
-    pl.col("pre_pt_root_id").alias("pt_root_id"), "pre_total_known_synapses"
-)
 proofread = (
     Tables["proofread_cell_info"]
     .lazy()
-    .join(pre_totals, on="pt_root_id", how="left")
     .group_by("cell_type")
     .agg(
         pl.len().alias("n_cells"),

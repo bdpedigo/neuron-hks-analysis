@@ -11,53 +11,31 @@ Run it with `--scratch` until `proofread_pre_synapses` exists (see
 # %%
 import sys
 
+import matplotlib.pyplot as plt
+import numpy as np
 import polars as pl
+from matplotlib.ticker import MaxNLocator
 
-from analysis import Tables, save_matplotlib_figure, set_matplotlib_theme
+from analysis import CELL_TYPE_PALETTE, Tables, save_matplotlib_figure, set_matplotlib_theme
 from analysis.census_inputs import glue, out_path, pre_synapses
 from analysis.plots import add_cell_type_y, sorted_stripplot_with_means, weighted_means
-from analysis.products.census import aggregate_pre
 
 SCRATCH = "--scratch" in sys.argv
 set_matplotlib_theme()
 out_path = out_path(SCRATCH)
 synapses = pre_synapses(SCRATCH).filter(pl.col("tag") != "unknown")
 
-# %% COUNTS OF OUTPUT SYNAPSES PER CELL, BY TARGET BROAD TYPE AND COMPARTMENT
-tag_counts = []
-for target in ["excitatory", "inhibitory"]:
-    counts = (
-        synapses.filter(pl.col("post_broad_type") == target)
-        .group_by("pre_pt_root_id")
-        .agg(
-            (pl.col("tag") == tag).sum().alias(f"pre_{tag}_synapse_to_{target}")
-            for tag in ["spine", "shaft", "soma"]
-        )
-        .with_columns(
-            pl.sum_horizontal(
-                f"pre_{tag}_synapse_to_{target}" for tag in ["spine", "shaft", "soma"]
-            ).alias(f"pre_total_synapse_to_{target}")
-        )
-        .with_columns(
-            (
-                pl.col(f"pre_{tag}_synapse_to_{target}")
-                / pl.col(f"pre_total_synapse_to_{target}")
-            ).alias(f"pre_p_{tag}_synapse_to_{target}")
-            for tag in ["spine", "shaft", "soma"]
-        )
-    )
-    tag_counts.append(counts)
-
 # The thalamic cells have no soma in the volume, so their depth is the mean depth of
 # their output synapses. It only orders the cells within a row.
 output_depth = synapses.group_by("pre_pt_root_id").agg(
     output_depth=pl.col("ctr_pt_position_um_y").mean()
 )
-cells = Tables["proofread_cell_info"].lazy().rename({"pt_root_id": "pre_pt_root_id"})
-for counts in tag_counts:
-    cells = cells.join(counts, on="pre_pt_root_id", how="left")
+# NOTE: the output rollups (`pre_*`, `pre_to_exc_*`, `pre_to_inh_*`) come from
+# `proofread_cell_info`, which runs `aggregate_pre` on `proofread_pre_synapses`.
 cells = (
-    cells.join(aggregate_pre(synapses), on="pre_pt_root_id", how="left")
+    Tables["proofread_cell_info"]
+    .lazy()
+    .rename({"pt_root_id": "pre_pt_root_id"})
     .join(output_depth, on="pre_pt_root_id", how="left")
     .with_columns(
         depth=pl.when(pl.col("is_thalamic"))
@@ -70,13 +48,17 @@ cells = (
 cells = add_cell_type_y(cells, depth="depth")
 
 # %% 4C, 4D: PROPORTION OF OUTPUTS ONTO SPINES, BY TARGET BROAD TYPE
+# The proportion is spine over spine, shaft and soma outputs onto the target type.
 legend_kws = {
     "excitatory": dict(loc="upper left", bbox_to_anchor=(0.02, 0.985)),
     "inhibitory": dict(loc="upper right", bbox_to_anchor=(0.98, 0.98)),
 }
+prefixes = {"excitatory": "pre_to_exc_", "inhibitory": "pre_to_inh_"}
 for target, kws in legend_kws.items():
-    x = f"pre_p_spine_synapse_to_{target}"
-    weight_x = f"pre_total_synapse_to_{target}"
+    x = f"{prefixes[target]}p_spine_synapse"
+    weight_x = f"{prefixes[target]}total_known_synapses"
+    # NOTE: the glued names keep the old column names, which the paper uses.
+    glue_prefix = f"column_summary_pre_p_spine_synapse_to_{target}_"
     fig, axs, means = sorted_stripplot_with_means(
         data=cells,
         x=x,
@@ -89,13 +71,47 @@ for target, kws in legend_kws.items():
     save_matplotlib_figure(
         fig, f"cell_type_output_proportion_to_{target}_scatter", out_path
     )
-    glue(SCRATCH, format="{:.1f}%", prefix=f"column_summary_{x}_", **means.to_dict())
+    glue(SCRATCH, format="{:.1f}%", prefix=glue_prefix, **means.to_dict())
     glue(
         SCRATCH,
         format="{:.1f}%",
-        prefix=f"column_summary_{x}_",
+        prefix=glue_prefix,
         **weighted_means(cells, "broad_type", x, weight_x).to_dict(),
     )
+
+# %% THE THALAMIC CELLS THAT TARGET EXCITATORY SPINES AT A LOW RATE
+# 4C: most thalamic cells put most of their outputs onto excitatory cells on spines,
+# so these cells stand out. Many thalamic cells are new since v1412 (73, against 20).
+low_th = cells.query("is_thalamic and pre_to_exc_p_spine_synapse < 0.8").sort_values(
+    "pre_to_exc_p_spine_synapse"
+)
+print(f"{len(low_th)} of {cells['is_thalamic'].sum()} thalamic cells have p < 0.8:")
+print(
+    low_th[
+        ["pre_pt_root_id", "pre_to_exc_p_spine_synapse", "pre_to_exc_total_known_synapses"]
+    ].to_string(index=False)
+)
+
+# %% THE NUMBER OF OUTPUT SYNAPSES OF THE THALAMIC CELLS
+# Not a paper panel: a check that the low-rate thalamic cells above are small axons.
+thalamic = cells.query("is_thalamic")
+print(thalamic["pre_total_synapses"].describe(percentiles=[0.1, 0.25, 0.5, 0.75, 0.9]))
+fig, ax = plt.subplots(figsize=(6, 4.5), layout="constrained")
+counts = thalamic["pre_total_synapses"]
+bins = np.geomspace(counts.min() * 0.9, counts.max() * 1.1, 25)
+is_low = thalamic["pre_pt_root_id"].isin(low_th["pre_pt_root_id"])
+ax.hist(
+    [counts[~is_low], counts[is_low]],
+    bins=bins,
+    stacked=True,
+    color=[CELL_TYPE_PALETTE["TH"], "0.25"],
+    label=["Other thalamic cells", "Excitatory spine rate < 0.8"],
+)
+ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+ax.set(xscale="log", xlim=(bins[0], bins[-1]), xlabel="Output synapses", ylabel="Thalamic cells")
+ax.spines[["top", "right"]].set_visible(False)
+ax.legend(frameon=False, loc="lower left", bbox_to_anchor=(0, 1.02))
+save_matplotlib_figure(fig, "thalamic_output_synapse_counts", out_path)
 
 # %% MEAN SIZE OF THE SYNAPSES ONTO EXCITATORY CELLS, BY PRESYNAPTIC TYPE AND COMPARTMENT
 sizes = (

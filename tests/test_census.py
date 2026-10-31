@@ -7,7 +7,6 @@ from analysis.products.census import (
     _add_skeleton_sides,
     _add_tag_detailed,
     _drop_autapses,
-    _spine_columns,
     aggregate_post,
     aggregate_pre,
     join_census_features,
@@ -41,25 +40,6 @@ def test_drop_autapses():
     assert _drop_autapses(synapses)["synapse_id"].to_list() == [2]
 
 
-def test_spine_columns_prefix_all_but_the_keys():
-    structure = pl.DataFrame(
-        {
-            "synapse_id": [1],
-            "root_id": [10],
-            "pre_pt_root_id": [20],
-            "structure_id": [3],
-            "n_pre_root_ids": [2],
-            "is_multi": [True],
-        }
-    )
-    assert _spine_columns(structure).columns == [
-        "synapse_id",
-        "structure_id",
-        "spine_n_pre_root_ids",
-        "spine_is_multi",
-    ]
-
-
 def test_join_census_features():
     synapses = pl.LazyFrame(
         {
@@ -72,11 +52,16 @@ def test_join_census_features():
     # Synapse 2 is unmapped, and synapse 3 is an autapse. Synapse 4 is on root 11,
     # and its structure ID 7 is a spine of root 10 only.
     features = pl.LazyFrame(
-        {"synapse_id": [1, 3, 4], "tag": ["spine", "spine", "spine"], "structure_id": [7, 7, 7]}
+        {
+            "synapse_id": [1, 3, 4],
+            "tag": ["spine", "spine", "spine"],
+            "tag_posterior": [0.9, 0.8, 0.7],
+            "structure_id": [7, 7, 7],
+        }
     )
     spines = pl.LazyFrame(
         {
-            "root_id": [10],
+            "post_pt_root_id": [10],
             "structure_id": [7],
             "n_synapses": [2],
             "n_pre_root_ids": [2],
@@ -90,6 +75,7 @@ def test_join_census_features():
     joined = join_census_features(synapses, features, spines).collect().sort("synapse_id")
     assert joined["synapse_id"].to_list() == [1, 2, 4]
     assert joined["tag"].cast(pl.String).to_list() == ["spine", None, "spine"]
+    assert joined["tag_posterior"].to_list() == [0.9, None, 0.7]
     assert joined["spine_is_multi"].to_list() == [True, None, None]
     assert joined["tag_detailed"].cast(pl.String).to_list() == [
         "multi_spine",
@@ -218,7 +204,7 @@ def test_aggregate_post_counts_and_proportions():
     assert row["post_mean_multi_spine_size"] == pytest.approx(3.0)
 
 
-def test_aggregate_pre_splits_the_excitatory_targets():
+def test_aggregate_pre_splits_the_excitatory_and_inhibitory_targets():
     synapses = _synapses(
         [
             (1, 10, "excitatory", "spine", "single_spine", 1, 1.0),
@@ -229,5 +215,65 @@ def test_aggregate_pre_splits_the_excitatory_targets():
     )
     pre = aggregate_pre(synapses).collect()
     assert pre.select(
-        "pre_pt_root_id", "pre_total_synapses", "pre_shaft_synapses", "pre_to_exc_total_synapses"
-    ).rows() == [(1, 3, 2, 1), (2, 1, 1, None)]
+        "pre_pt_root_id",
+        "pre_total_synapses",
+        "pre_shaft_synapses",
+        "pre_to_exc_total_synapses",
+        "pre_to_inh_total_synapses",
+        "pre_to_inh_p_shaft_synapse",
+    ).rows() == [(1, 3, 2, 1, 2, 1.0), (2, 1, 1, None, 1, 1.0)]
+
+
+def test_census_synapses_per_bucket_equals_one_join(monkeypatch):
+    import analysis.products.census as census
+
+    synapses = pl.DataFrame(
+        {
+            "id": [1, 2, 3, 4],
+            "pre_pt_root_id": [20, 30, 40, 20],
+            "post_pt_root_id": [10, 10, 11, 11],
+            "size": [5, 6, 7, 8],
+            "bucket": [0, 0, 1, 1],
+        }
+    )
+    features = pl.DataFrame(
+        {
+            "synapse_id": [1, 2, 3, 4],
+            "post_pt_root_id": [10, 10, 11, 11],
+            "tag": ["spine", "shaft", "spine", "spine"],
+            "tag_posterior": [0.9, 0.8, 0.7, 0.6],
+            "structure_id": [7, None, 7, 8],
+            "bucket": [0, 0, 1, 1],
+        }
+    )
+    spines = pl.DataFrame(
+        {
+            "post_pt_root_id": [10, 11, 11],
+            "structure_id": [7, 7, 8],
+            "n_synapses": [1, 1, 1],
+            "n_pre_root_ids": [1, 1, 1],
+            "unitary_pred_label": ["unitary"] * 3,
+            "is_multi": [False, False, False],
+            "size_nm3": [1.0, 2.0, 3.0],
+            "area_nm2": [1.0, 2.0, 3.0],
+            "bucket": [0, 1, 1],
+        }
+    )
+    frames = {
+        "microns_synapses": synapses,
+        "synapse_census_features": features,
+        "spine_census_features": spines,
+    }
+    monkeypatch.setattr(census, "N_BUCKETS", 2)
+    monkeypatch.setattr(
+        census,
+        "_scan_bucket",
+        lambda name, chunk: frames[name].lazy().filter(pl.col("bucket") == chunk).drop("bucket"),
+    )
+    whole = census.join_census_features(
+        *(frames[name].lazy().drop("bucket") for name in census.GRAIN_TABLES)
+    )
+    per_bucket = census.census_synapses(pl.lit(True))
+    assert per_bucket.sort("synapse_id").equals(whole.collect().sort("synapse_id"))
+    post = census.census_synapses(pl.lit(True), then=aggregate_post)
+    assert post.sort("post_pt_root_id").equals(aggregate_post(whole).collect().sort("post_pt_root_id"))

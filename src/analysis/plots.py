@@ -1,10 +1,13 @@
-"""Matplotlib helpers for the census figures in `scripts/census/`. Only plot code
-lives here: the scripts make the tables that these functions draw."""
+"""Matplotlib helpers for the census figures in `scripts/census/` and the skeleton
+figures in `scripts/spine_density/`. Only plot code lives here: the scripts make the
+tables that these functions draw."""
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.collections import LineCollection
 
 from .colors import CELL_TYPE_PALETTE, COMPARTMENT_PALETTE_MUTED_HEX
 from .io import CELL_TYPE_CATEGORIES
@@ -280,3 +283,39 @@ def multi_proportion_lineplot(data, y, ax):
     )
     ax.set_xlabel("Proportion of \nspines with\nmultiple inputs")
     ax.set_xlim(0, ax.get_xlim()[1])
+
+
+def add_skeleton(
+    ax,
+    edges: np.ndarray,
+    xy: np.ndarray,
+    values: np.ndarray | None = None,
+    cmap="viridis",
+    clim: tuple[float, float] | None = None,
+    color="0.5",
+    nan_color="0.85",
+    linewidths=0.5,
+    **kwargs,
+) -> LineCollection:
+    """Draw a skeleton on `ax`, one segment per edge.
+
+    `edges` holds positional vertex pairs and `xy` the 2D position of each vertex.
+    With `values` (one per vertex), each edge has the mean of its two vertices in
+    `cmap`, and an edge with a NaN value is `nan_color`. Without `values`, all edges are
+    `color`.
+    """
+    lines = LineCollection(xy[edges], linewidths=linewidths, **kwargs)
+    if values is None:
+        lines.set_color(color)
+    else:
+        if isinstance(cmap, str):
+            cmap = mpl.colormaps[cmap]
+        lines.set_cmap(cmap.with_extremes(bad=nan_color))
+        # The mean of two NaN values is NaN, without the warning of np.nanmean.
+        pair = values[edges]
+        n = np.isfinite(pair).sum(axis=1)
+        lines.set_array(np.where(n > 0, np.nansum(pair, axis=1) / np.maximum(n, 1), np.nan))
+        if clim is not None:
+            lines.set_clim(*clim)
+    ax.add_collection(lines)
+    return lines

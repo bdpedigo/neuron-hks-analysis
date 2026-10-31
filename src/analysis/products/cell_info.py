@@ -79,6 +79,14 @@ def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=Tru
         cell_info.loc[thalamic_roots, "cell_type"] = "TH"
         cell_info.loc[thalamic_roots, "pt_position_y"] = 0
         cell_info.loc[thalamic_roots, "axon_cleaned"] = True
+        # NOTE: `aibs_cell_info` takes `axon_strategy` from the same table, with the
+        # `axon_` prefix dropped, so the thalamic roots get it the same way.
+        axon_strategy = thalamic_table.drop_duplicates("pt_root_id").set_index("pt_root_id")[
+            "strategy_axon"
+        ]
+        cell_info.loc[thalamic_roots, "axon_strategy"] = (
+            axon_strategy.loc[thalamic_roots].str.removeprefix("axon_").to_numpy()
+        )
 
     cell_info["axon_cleaned"] = cell_info["axon_cleaned"].astype(bool)
 
@@ -97,6 +105,12 @@ def load_neuron_info(version=VERSION, transform_positions=True, add_thalamic=Tru
     cell_info.query("broad_type.isin(@BROAD_TYPE_CATEGORIES)", inplace=True)
 
     return cell_info
+
+
+# NOTE: bump CELL_INFO_COLUMNS_VERSION when the columns or their values change, so
+# the cache key of `cell_info` and of the tables that read it moves. 2: the thalamic
+# roots have `axon_strategy` (2026-10-30).
+CELL_INFO_COLUMNS_VERSION = 2
 
 
 def build_cell_info(version=VERSION) -> pl.DataFrame:
@@ -118,9 +132,9 @@ Tables.register(
         "One row per root in the CAVE view `aibs_cell_info`, plus the thalamic roots "
         "from `proofreading_status_and_strategy`. It holds the `nucleus_id`, the broad "
         "type, cell type "
-        "and mtype, `axon_cleaned`, and the soma point in nm (`pt_position_*`) and "
+        "and mtype, `axon_cleaned` and `axon_strategy` (also on the thalamic roots), and the soma point in nm (`pt_position_*`) and "
         "in transformed µm (`pt_position_um_*`). Roots that appear twice are dropped."
     ),
     materialize=lambda path: write_parquet_atomic(build_cell_info(), path),
-    cache_params=lambda: {"version": VERSION},
+    cache_params=lambda: {"version": VERSION, "columns": CELL_INFO_COLUMNS_VERSION},
 )

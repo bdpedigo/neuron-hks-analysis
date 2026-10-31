@@ -72,7 +72,7 @@ if not spines_stash.exists():
             pl.col("tag") == "spine",
             pl.col("structure_id").is_not_null(),
         )
-        .group_by(root_id="post_pt_root_id", structure_id="structure_id")
+        .group_by("post_pt_root_id", "structure_id")
         .agg(
             pl.col("post_cell_type").first(),
             (pl.col("post_euc_distance_to_nuc").mean() / 1000).alias(
@@ -87,8 +87,8 @@ if not spines_stash.exists():
     spines_stash.save(
         Tables["column_spines"]
         .lazy()
-        .select("root_id", "structure_id", "size_nm3", "is_multi")
-        .join(spine_synapses, on=["root_id", "structure_id"], how="inner")
+        .select("post_pt_root_id", "structure_id", "size_nm3", "is_multi")
+        .join(spine_synapses, on=["post_pt_root_id", "structure_id"], how="inner")
         .with_columns(
             tag_detailed=pl.when("is_multi")
             .then(pl.lit("multi_spine"))

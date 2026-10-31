@@ -11,6 +11,7 @@ import polars as pl
 from ossify.algorithms import subtree_aggregate
 from tqdm.auto import tqdm
 
+from ..io import DATA_PATH
 from ..sources import SKELETON_PATH, VERSION, VERSION_TIMESTAMP
 from . import cell_selection  # noqa: F401 -- registers "cell_selection", whose cache key P8 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", whose cache key P8 reads
@@ -27,14 +28,54 @@ REAL_TIP_MIN_HOPS = 3
 # this many rounds.
 TIP_FILL_ROUNDS = 4
 
+# A local copy of the skeleton files that `cached_skeleton` reads.
+SKELETON_CACHE = DATA_PATH / "skeletons"
 
-def load_skeleton(root_id: int) -> osy.Cell:
-    cell = osy.load_cell(str(SKELETON_PATH / f"{root_id}.osy"))
+
+def _check_version(cell: osy.Cell, root_id: int) -> osy.Cell:
     timestamp = datetime.fromisoformat(cell.meta["timestamp"])
     assert abs((timestamp - VERSION_TIMESTAMP).total_seconds()) < 1, (
         f"skeleton of {root_id} is at {timestamp}, not at v{VERSION}"
     )
     return cell
+
+
+def load_skeleton(root_id: int) -> osy.Cell:
+    cell = osy.load_cell(str(SKELETON_PATH / f"{root_id}.osy"))
+    return _check_version(cell, root_id)
+
+
+def cached_skeleton(root_id: int) -> osy.Cell:
+    """The skeleton of `root_id`, from a local copy of the file in `SKELETON_PATH`.
+    The first call copies the file to `SKELETON_CACHE`."""
+    path = SKELETON_CACHE / f"{root_id}.osy"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_bytes((SKELETON_PATH / f"{root_id}.osy").read_bytes())
+        tmp.rename(path)
+    return _check_version(osy.load_cell(str(path)), root_id)
+
+
+def dendrite_mask(skel) -> np.ndarray:
+    """Per skeleton vertex (positional), True for the dendrite and soma.
+
+    These are the vertices that are not axon, and also the axon vertices on the path
+    from a vertex that is not axon to the root. So the mask is one connected piece
+    that holds the root, and a dendrite that leaves from a mislabeled stretch of axon
+    stays attached to the soma.
+    """
+    parent = skel.parent_node_array
+    mask = ~skel.get_feature("is_axon").astype(bool)
+    frontier = np.unique(parent[mask & (parent >= 0)])
+    frontier = frontier[~mask[frontier]]
+    while len(frontier):
+        mask[frontier] = True
+        frontier = np.unique(parent[frontier])
+        frontier = frontier[(frontier >= 0)]
+        frontier = frontier[~mask[frontier]]
+    assert mask[skel.root_positional], "the root is not in the dendrite mask"
+    return mask
 
 
 def max_dist_to_tip(skel) -> np.ndarray:
