@@ -166,6 +166,83 @@ def _label_ei_border(axs, start, side):
     ax.set_ylabel(label, labelpad=35, fontsize="large")
 
 
+def cell_type_dotplot(
+    data: pd.DataFrame,
+    x: str,
+    hue: str,
+    palette: dict,
+    side: str,
+    xlabel: str = "",
+    legend: bool = False,
+    xlim=(0, 1),
+    figsize=(3.9, 6.5),
+):
+    """One row per cell type and one dot per level of `hue` at `x`, joined by a
+    line, with the E and I brackets of `sorted_stripplot_with_means`. `data` needs
+    `cell_type`, `hue` and `x`, one row per cell type and level. `side` is "pre" for
+    the output cells (with TH) or "post" for the input cells.
+
+    The rows of both sides sit at the same heights, so that panels side by side line
+    up: an input plot leaves the TH row empty."""
+    if side == "pre":
+        categories, start = OUTPUT_CELL_TYPE_CATEGORIES, 0
+    else:
+        categories, start = INPUT_CELL_TYPE_CATEGORIES, 1
+    rows = {c: i + start for i, c in enumerate(categories)}
+    data = data[data["cell_type"].astype(str).isin(categories)].copy()
+    data["row"] = data["cell_type"].astype(str).map(rows)
+
+    # The third column is an empty margin: constrained layout does not make room
+    # for the end of the x label or the last tick label, which stick out to the
+    # right of the axes.
+    fig, axs = plt.subplots(
+        1,
+        3,
+        figsize=figsize,
+        dpi=300,
+        layout="constrained",
+        gridspec_kw=dict(width_ratios=[1.2, 10, 1.0]),
+    )
+    axs[2].axis("off")
+    axs = axs[:2]
+    ax = axs[1]
+    for _, group in data.groupby("row"):
+        ax.plot(group[x], group["row"], color="0.6", linewidth=1.5, zorder=1)
+    for level, color in palette.items():
+        sub = data[data[hue] == level]
+        ax.scatter(
+            sub[x],
+            sub["row"],
+            s=70,
+            color=color,
+            edgecolor="black",
+            linewidth=0.6,
+            zorder=2,
+            label=level,
+            clip_on=False,
+        )
+    ax.axhline(EI_BORDER, color="black", linewidth=2, linestyle="--", zorder=0)
+    _format_cell_type_axis(ax, categories, start)
+    ax.set_ylim(len(OUTPUT_CELL_TYPE_CATEGORIES) - 0.5, -0.5)
+    ax.set(xlim=xlim, xlabel=xlabel, xticks=np.linspace(xlim[0], xlim[1], 3))
+    if legend:
+        # Inside the axes, so that the panels with and without a legend have the
+        # same size. It sits in the top row, which is empty in an input plot.
+        legend_artist = ax.legend(
+            loc="upper center",
+            ncols=len(palette),
+            frameon=False,
+            handletextpad=0.1,
+            columnspacing=0.8,
+            fontsize="small",
+            borderaxespad=0.1,
+        )
+        # Out of the layout, so that it does not shrink the axes.
+        legend_artist.set_in_layout(False)
+    _label_ei_border(axs, start, side)
+    return fig, axs
+
+
 def sorted_stripplot_with_means(
     data: pd.DataFrame,
     x: str,

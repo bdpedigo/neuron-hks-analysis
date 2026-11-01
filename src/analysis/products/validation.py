@@ -61,6 +61,34 @@ def fetch_neurd_labels(client, synapse_ids: list[int], version=VERSION) -> pl.Da
     return _neurd_classes(pl.from_pandas(targets))
 
 
+def download_neurd_export(path) -> None:
+    """Write the valid rows of the NEURD export (S7) at `NEURD_LABELS_PATH` to
+    `path`: `id`, `target_id` (the synapse ID) and `value`, sorted on `target_id`."""
+    write_parquet_atomic(
+        pl.scan_delta(str(NEURD_LABELS_PATH))
+        .filter(pl.col("valid"))
+        .select("id", "target_id", "value")
+        .collect()
+        .sort("target_id"),
+        path,
+    )
+
+
+Tables.register(
+    "neurd_export",
+    description=(
+        "The valid rows of the public export of the NEURD table "
+        "`synapse_target_structure` at `VERSION` (S7), downloaded once: `id`, "
+        "`target_id` (the synapse ID, `id` in `microns_synapses`) and `value` (see "
+        "`NEURD_DETAILED_LABELS`), sorted on `target_id`. The export has no root IDs. "
+        "At v1822 one synapse (target_id 358086379) has two valid rows with two "
+        "different values."
+    ),
+    materialize=download_neurd_export,
+    cache_params=lambda: {"version": VERSION, "source": str(NEURD_LABELS_PATH)},
+)
+
+
 def fetch_census_neurd_labels() -> pl.DataFrame:
     """The NEURD label of each synapse onto a column cell or from a proofread cell,
     one row per synapse, with the flags `on_column` and `from_proofread`.
@@ -81,11 +109,7 @@ def fetch_census_neurd_labels() -> pl.DataFrame:
             .select(columns),
         ]
     ).unique("id")
-    targets = (
-        pl.scan_delta(str(NEURD_LABELS_PATH))
-        .filter(pl.col("valid"))
-        .select("id", "target_id", "value")
-    )
+    targets = Tables["neurd_export"].lazy().select("id", "target_id", "value")
     # A synapse from a proofread cell onto a column cell is in both pulls.
     joined = synapses.join(targets, left_on="id", right_on="target_id", how="inner", suffix="_neurd")
     joined = joined.select(
@@ -135,8 +159,7 @@ Tables.register(
     "census_neurd_labels",
     description=(
         "The NEURD label of each synapse onto a column cell or from a proofread "
-        "cell that NEURD labeled, one row per synapse, from the export of the "
-        "NEURD table `synapse_target_structure`. These are the synapses of `column_post_synapses` "
+        "cell that NEURD labeled, one row per synapse, from `neurd_export`. These are the synapses of `column_post_synapses` "
         "and `proofread_pre_synapses`, with autapses. Join on `synapse_id`. "
         "`on_column` and `from_proofread` say which side holds the synapse. "
         "`neurd_label` is null for the axon labels."
@@ -145,8 +168,7 @@ Tables.register(
         fetch_census_neurd_labels(), path
     ),
     cache_params=lambda: {
-        "version": VERSION,
-        "source": str(NEURD_LABELS_PATH),
+        "neurd_export": Tables["neurd_export"].cache_key,
         "microns_synapses": Tables["microns_synapses"].cache_key,
         "cell_selection": Tables["cell_selection"].cache_key,
     },

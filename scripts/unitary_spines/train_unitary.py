@@ -12,7 +12,13 @@ import time
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import f1_score, make_scorer, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    make_scorer,
+    precision_score,
+    recall_score,
+)
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold, cross_validate
 
 from analysis import Tables, save_variables
@@ -44,7 +50,11 @@ def make_unitary_model(random_state: int) -> RandomForestClassifier:
     return RandomForestClassifier(**UNITARY_RF_PARAMS, n_jobs=-1, random_state=random_state)
 
 
+# "f1", "precision" and "recall" are for the unitary class alone.
 scoring = {
+    "accuracy": make_scorer(accuracy_score),
+    "weighted_f1": make_scorer(f1_score, average="weighted"),
+    "macro_f1": make_scorer(f1_score, average="macro"),
     "f1": make_scorer(f1_score, pos_label=POSITIVE),
     "precision": make_scorer(precision_score, pos_label=POSITIVE),
     "recall": make_scorer(recall_score, pos_label=POSITIVE),
@@ -84,12 +94,14 @@ cv_results = pd.DataFrame(rows)
 with pd.option_context("display.float_format", "{:.3f}".format, "display.width", 120):
     print(cv_results.to_string(index=False))
 
-is_main_f1 = (cv_results["variant"] == MAIN_UNITARY_MODEL) & (cv_results["metric"] == "f1")
-main_f1 = cv_results[is_main_f1].set_index("cv")
+main_cv = cv_results[cv_results["variant"] == MAIN_UNITARY_MODEL].set_index(["cv", "metric"])
 save_variables(model_n_training_spines=len(spines), format="{:,}", prefix="unitary_spines_")
 save_variables(
-    model_mean_cv_f1_score=main_f1.loc["grouped by cell", "mean"],
-    model_mean_cv_f1_score_ungrouped=main_f1.loc["ungrouped", "mean"],
+    model_mean_cv_f1_score=main_cv.loc[("grouped by cell", "f1"), "mean"],
+    model_mean_cv_f1_score_ungrouped=main_cv.loc[("ungrouped", "f1"), "mean"],
+    model_mean_cv_weighted_f1_score=main_cv.loc[("grouped by cell", "weighted_f1"), "mean"],
+    model_mean_cv_macro_f1_score=main_cv.loc[("grouped by cell", "macro_f1"), "mean"],
+    model_mean_cv_accuracy=main_cv.loc[("grouped by cell", "accuracy"), "mean"],
     format="{:.3f}",
     prefix="unitary_spines_",
 )

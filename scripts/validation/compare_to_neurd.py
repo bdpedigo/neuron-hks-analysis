@@ -13,6 +13,7 @@ from analysis import (
     save_variables,
     set_matplotlib_theme,
 )
+from analysis.plots import cell_type_dotplot
 
 # %%
 # NOTE: NEURD labels about two thirds of the validation synapses, and its axon
@@ -130,3 +131,21 @@ ax.text(
 ax.get_legend().remove()
 
 save_matplotlib_figure(fig, "compare_neurd_hks_by_cell_type", subfolder="compare_to_neurd")
+
+# %%
+# The same scores as a dot plot with the cell types on the y axis, in the style of
+# the census strip plots, for the NEURD composite figure.
+METHOD_PALETTE = {"NEURD": "lightgrey", "HKS": "black"}
+fig, axs = cell_type_dotplot(
+    score_results.with_columns(pl.col("method").replace({"neurd": "NEURD", "hks": "HKS"}))
+    .to_pandas(),
+    x="macro_f1",
+    hue="method",
+    palette=METHOD_PALETTE,
+    side="post",
+    xlabel="Macro F1 score\non the validation\nsynapses",
+    legend=True,
+)
+save_matplotlib_figure(
+    fig, "compare_neurd_hks_by_cell_type_dots", subfolder="compare_to_neurd"
+)
