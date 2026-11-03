@@ -159,4 +159,5 @@ panel = PanelMosaic(
     layout="constrained",
     panel_borders=False,
 )
-panel.write(FIGURE_PATH / "h01_validation_composite_with_calibration")
+# NOTE: the name is what main.tex includes, so `just publish-figures` copies it as is.
+panel.write(FIGURE_PATH / "h01_validation_composite")

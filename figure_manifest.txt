@@ -1,0 +1,23 @@
+# Figures this repo publishes into the paper repo (ssa).
+#
+# One path per line, relative to the repo root. The paper gets the basename, under
+# <paper>/figures/, which is what \includegraphics asks for. Blank lines and lines
+# starting with # are ignored.
+#
+# Run `just publish-figures --dry-run` first, then `just publish-figures`. It copies
+# only. Review and commit in the paper repo yourself.
+#
+# NOTE: figures/stat_summaries/ holds April 2026 files with some of these basenames.
+# figures/census/ is the current source. Do not repoint these at stat_summaries.
+
+# Figure 4
+figures/composites/stat_summary_figure.png
+
+# Figure 5
+figures/composites/multi_spine_figure.png
+
+# Figure 6
+figures/h01_validation/h01_validation_composite.png
+
+# Supplement: the NEURD comparison (main.tex includes it as neurd_comparison.png)
+figures/composites/neurd_comparison.png
