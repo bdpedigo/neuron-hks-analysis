@@ -24,3 +24,14 @@ figures/h01_validation/h01_validation_composite.png
 
 # Supplement: the NEURD comparison (main.tex includes it as neurd_comparison.png)
 figures/composites/neurd_comparison.png
+
+# Supplement: the census panels
+figures/census/cell_type_pair_waffles.png
+figures/census/excitatory_post_p_spine_site_is_multi_distribution_by_cell_type.png
+figures/census/multi_spine_proportion_null_23P.png
+figures/census/p_multi_correlations.png
+figures/census/spine_synapse_area_corr_by_multi.png
+
+# Supplement: the model panels
+figures/validation/validation_confusion_matrices.png
+figures/model_training/hks_synapse_learning_curve.png
