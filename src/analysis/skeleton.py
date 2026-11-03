@@ -5,7 +5,14 @@ from sklearn.neighbors import NearestNeighbors
 from meshmash import graph_to_adjacency, subset_mesh_by_indices
 
 
-def mask_dendrite_by_client_skeleton(mesh, root_id, client, distance_threshold=5):
+def mask_dendrite_by_client_skeleton(
+    mesh, root_id, client, distance_threshold=5, return_mask=False
+):
+    """The soma and dendrite part of `mesh`, by the level 2 skeleton compartments.
+
+    With `return_mask`, also return the boolean mask over the input vertices, so a
+    caller can subset its own per-vertex arrays the same way.
+    """
     skel = client.skeleton.get_skeleton(root_id, output_format="dict")
     skeleton_vertices = skel["vertices"]
     skeleton_edges = skel["edges"]
@@ -34,4 +41,6 @@ def mask_dendrite_by_client_skeleton(mesh, root_id, client, distance_threshold=5
 
     mesh = subset_mesh_by_indices(mesh, mesh_is_dendrosoma)
 
+    if return_mask:
+        return mesh, mesh_is_dendrosoma
     return mesh
