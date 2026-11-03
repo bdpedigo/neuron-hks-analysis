@@ -42,7 +42,14 @@ from .pyvista import (
     set_up_camera,
 )
 from .skeleton import mask_dendrite_by_client_skeleton
-from .sources import VERSION, VERSION_TIMESTAMP
+from .sources import (
+    SYNAPSE_SIZE_LABEL,
+    SYNAPSE_SIZE_LABEL_VX,
+    SYNAPSE_VOXEL_VOLUME_NM3,
+    VERSION,
+    VERSION_TIMESTAMP,
+    synapse_size_nm3,
+)
 from .stash import Stash
 from .utils import (
     cell_type_mapper,
@@ -89,6 +96,7 @@ __all__ = [
     "read_synapses",
     "read_variables",
     "save_variables",
+    "synapse_size_nm3",
     "BROAD_TYPE_CATEGORIES",
     "CELL_TYPE_CATEGORIES",
     "MTYPE_CATEGORIES",
@@ -107,6 +115,9 @@ __all__ = [
     "pca2d_to_colors",
     "pca3d_to_colors",
     "VERSION_TIMESTAMP",
+    "SYNAPSE_SIZE_LABEL",
+    "SYNAPSE_SIZE_LABEL_VX",
+    "SYNAPSE_VOXEL_VOLUME_NM3",
     "VERSION",
     "DATA_PATH",
     "TABLE_PATH",

@@ -22,7 +22,12 @@ from analysis import (
     save_variables,
     set_matplotlib_theme,
 )
-from analysis.sources import MICRONS_SYNAPSE_RESOLUTION
+from analysis.sources import (
+    SYNAPSE_SIZE_LABEL,
+    SYNAPSE_SIZE_LABEL_VX,
+    SYNAPSE_VOXEL_VOLUME_NM3,
+    synapse_size_nm3,
+)
 
 set_matplotlib_theme()
 out_path = FIG_PATH / "census"
@@ -108,13 +113,13 @@ ei_synapses = (
 )
 print(f"{len(ei_spines)} spines with one excitatory and one inhibitory input")
 
-# `size` counts the (4 x 4 x 40 nm) voxels of the automated cleft segmentation
-# (`synapses_pni_2` metadata). Each figure is also made with the size in nm³.
-VOXEL_VOLUME_NM3 = float(np.prod(MICRONS_SYNAPSE_RESOLUTION))
-ei_synapses["size_nm3"] = ei_synapses["size"] * VOXEL_VOLUME_NM3
+# The unit of a synapse `size` is defined once, in `analysis.sources`. nm³ is what the
+# paper reports, so it takes the plain filename; the voxel version keeps a `_vx`
+# suffix, for checking against the older figures.
+ei_synapses["size_nm3"] = synapse_size_nm3(ei_synapses["size"])
 UNITS = {
-    "vx": ("size", "synaptic junction size (vx)", ""),
-    "nm3": ("size_nm3", "synaptic junction size (nm³)", "_nm3"),
+    "nm3": ("size_nm3", SYNAPSE_SIZE_LABEL, "", SYNAPSE_VOXEL_VOLUME_NM3),
+    "vx": ("size", SYNAPSE_SIZE_LABEL_VX, "_vx", 1),
 }
 y = "spine_size_nm3"
 
@@ -139,7 +144,7 @@ for broad_type in ["excitatory", "inhibitory"]:
         **{f"multi_synapse_{broad_type}_mean_cleft_size": data[x].mean()},
     )
 
-for x, xlabel, suffix in UNITS.values():
+for x, xlabel, suffix, _ in UNITS.values():
     fig, axs = plt.subplots(
         1, 2, figsize=(12, 6), layout="constrained", sharex=True, sharey=True
     )
@@ -199,10 +204,10 @@ single = (
     .collect()
     .to_pandas()
 )
-single["size_nm3"] = single["size"] * VOXEL_VOLUME_NM3
+single["size_nm3"] = synapse_size_nm3(single["size"])
 print(f"{len(single):,} putative single-input spine synapses")
 
-for (x, xlabel, suffix), scale in zip(UNITS.values(), [1, VOXEL_VOLUME_NM3]):
+for x, xlabel, suffix, scale in UNITS.values():
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     sns.scatterplot(
         data=single,

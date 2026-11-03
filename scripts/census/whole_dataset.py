@@ -23,9 +23,11 @@ from sklearn.preprocessing import QuantileTransformer
 
 from analysis import (
     CELL_TYPE_PALETTE,
+    SYNAPSE_SIZE_LABEL,
     Tables,
     save_matplotlib_figure,
     set_matplotlib_theme,
+    synapse_size_nm3,
 )
 from analysis.census_inputs import glue, out_path, post_cells
 from analysis.io import CELL_TYPE_CATEGORIES
@@ -288,8 +290,18 @@ y_columns = {
         "scale": "log",
         "label": "Proportion of\nsynapses on shaft",
     },
-    "post_mean_synapse_size": {"scale": "log", "label": "Mean synapse\nsize (voxels)"},
+    "post_mean_synapse_size": {
+        "scale": "log",
+        # NOTE: the unit and its label come from `analysis.sources`, so every figure
+        # that reports a synapse size says the same thing.
+        "label": "Mean\n" + SYNAPSE_SIZE_LABEL,
+    },
 }
+# NOTE: converted in place, keeping the column name, because the glued variable name
+# below is built from it and the paper already cites
+# `column_summary_<type>_p_multi_spine_post_mean_synapse_size_pearson_r`. The scale is
+# linear, so it leaves that correlation unchanged.
+cells["post_mean_synapse_size"] = synapse_size_nm3(cells["post_mean_synapse_size"])
 cell_types = ["23P", "4P", "5P-IT", "6P-IT"]
 fig, axs = plt.subplots(
     len(cell_types),

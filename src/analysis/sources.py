@@ -139,6 +139,23 @@ NEURD_LABELS_PATH = UPath(
 )
 MICRONS_SYNAPSE_RESOLUTION = (4.0, 4.0, 40.0)
 
+# A synapse `size` counts the voxels that the automated cleft segmentation painted
+# (`synapses_pni_2` metadata), at `MICRONS_SYNAPSE_RESOLUTION`. The paper reports
+# synapse size in nm³, so convert with `synapse_size_nm3` and label the axis with
+# `SYNAPSE_SIZE_LABEL`. Keep both here, so every figure says the same thing.
+SYNAPSE_VOXEL_VOLUME_NM3 = (
+    MICRONS_SYNAPSE_RESOLUTION[0]
+    * MICRONS_SYNAPSE_RESOLUTION[1]
+    * MICRONS_SYNAPSE_RESOLUTION[2]
+)
+SYNAPSE_SIZE_LABEL = "synaptic junction size (nm³)"
+SYNAPSE_SIZE_LABEL_VX = "synaptic junction size (vx)"
+
+
+def synapse_size_nm3(size):
+    """A synapse `size`, in painted voxels, as a volume in nm³."""
+    return size * SYNAPSE_VOXEL_VOLUME_NM3
+
 # NOTE: the ossify skeletons (S5) carry the synapses at the time of the
 # skeleton, which is `VERSION_TIMESTAMP`. `skeleton.py` asserts this per file,
 # because a file that is overwritten in place keeps its path.
