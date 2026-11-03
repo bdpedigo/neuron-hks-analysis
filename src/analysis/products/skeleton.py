@@ -11,7 +11,7 @@ import polars as pl
 from ossify.algorithms import subtree_aggregate
 from tqdm.auto import tqdm
 
-from ..io import DATA_PATH
+from ..io import DATA_PATH, FROZEN_PATH
 from ..sources import SKELETON_PATH, VERSION, VERSION_TIMESTAMP
 from . import cell_selection  # noqa: F401 -- registers "cell_selection", whose cache key P8 reads
 from . import nuclei  # noqa: F401 -- registers "root_nuclei", whose cache key P8 reads
@@ -240,4 +240,21 @@ Tables.register(
         "real_tip_min_hops": REAL_TIP_MIN_HOPS,
         "tip_fill_rounds": TIP_FILL_ROUNDS,
     },
+)
+
+
+# A copy of gs://csm-skel/cellpax/minnie65_v1822/tables/processed/table--r122.parquet.
+CELLPAX_FEATURES_PATH = FROZEN_PATH / "minnie65_v1822_cellpax_r122.parquet"
+
+Tables.register(
+    "cellpax_features",
+    description=(
+        "One row per root at v1822, with about 160 skeleton and synapse features per "
+        "cell from the cellpax tables (gs://csm-skel/cellpax, r122). "
+        "`dendrite_cable_length_um` is the dendrite cable with the axon masked off. It "
+        "is 0.988 of the `dendrite_mask` cable on the column cells. About 1% of the "
+        "neurons have no row or a null cable."
+    ),
+    build=lambda: pl.scan_parquet(CELLPAX_FEATURES_PATH),
+    frozen=CELLPAX_FEATURES_PATH,
 )
