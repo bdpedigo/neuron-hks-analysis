@@ -14,9 +14,7 @@ from ..sources import BASE_CLOUD_PATH, DATASTACK, H01_DATASTACK
 from .catalog import Tables
 from .deployment import delta_table
 
-# The full-run cluster session, 2026-10-28 10:00Z to the cluster delete (ssa-backlog
-# TASK-49): Spot workers $329 and the default pool $1, closed at each pool delete.
-SESSION_DOLLARS = 331.0
+SESSION_DOLLARS = 206.32 + 133.64 # GKE Billing over the 2 days this ran
 # Every run of that session, by datastack. It also ran the H01 run and the wide-root
 # runs, so the dollars per step-hour hold some work outside the census.
 SESSION_RUNS = {

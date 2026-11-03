@@ -7,27 +7,30 @@
 The justfile wraps these commands (`just publish-figures`, `just publish-variables`,
 `just publish-status`).
 
-`figures` reads figure_manifest.txt and copies each listed file to
-<paper>/figures/<basename>. `variables` copies glued_variables.tex. Neither one checks
+`figures` reads figure_manifest.txt and writes each listed file to
+<paper>/figures/<basename>, re-encoded by normalize_png. `variables` copies
+glued_variables.tex. Neither one checks
 the paper: a \\var name with no definition is LaTeX's problem, and manuscript_macros.tex
 raises an error for one. `status` reports what both would do, and writes nothing.
 
 Nothing here commits, pushes or pulls. The only git calls are check-ignore and status,
 both read-only.
 
-This imports the standard library alone, on purpose. `from analysis import ...` pulls in
-pyvista, polars, caveclient and sklearn, which costs seconds for a file copy and fails
-whenever the scientific environment is broken.
+This imports the standard library and Pillow alone, on purpose. `from analysis import ...`
+pulls in pyvista, polars, caveclient and sklearn, which costs seconds for a file copy and
+fails whenever the scientific environment is broken.
 """
 
 import argparse
-import filecmp
+import io
 import os
 import re
 import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+
+from PIL import Image
 
 # NOTE: as in analysis.io, which this deliberately does not import.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -78,8 +81,25 @@ def read_manifest() -> list[Path]:
     return paths
 
 
+def normalize_png(source: Path) -> bytes:
+    """`source` as an RGB PNG with no ancillary chunks, which pdfTeX copies into the PDF
+    as is. An alpha channel or a chunk such as cairosvg's bKGD makes pdfTeX decode and
+    re-encode the image, which took 22 of the 24 s of a full manuscript pass. Alpha is
+    composited onto white, which loses nothing for the opaque figures this repo makes."""
+    # NOTE: the composites are larger than Pillow's decompression-bomb limit.
+    Image.MAX_IMAGE_PIXELS = None
+    with Image.open(source) as image:
+        image = image.convert("RGBA")
+        flat = Image.new("RGB", image.size, "white")
+        flat.paste(image, mask=image.getchannel("A"))
+    buffer = io.BytesIO()
+    flat.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def plan_copies(paths: list[Path], paper: Path, only: list[str]) -> list[tuple]:
-    """One (action, name, source, destination) per listed figure."""
+    """One (action, name, source, destination, data) per listed figure. `data` is the
+    normalized PNG, or None for a missing source."""
     actions = []
     for relative in paths:
         name = relative.name
@@ -87,33 +107,34 @@ def plan_copies(paths: list[Path], paper: Path, only: list[str]) -> list[tuple]:
             continue
         source = PROJECT_ROOT / relative
         destination = paper / "figures" / name
-        if not source.is_file():
+        data = normalize_png(source) if source.is_file() else None
+        if data is None:
             action = "missing"
         elif not destination.exists():
             action = "new"
-        elif filecmp.cmp(source, destination, shallow=False):
+        elif destination.read_bytes() == data:
             action = "same"
         else:
             action = "update"
-        actions.append((action, name, source, destination))
+        actions.append((action, name, source, destination, data))
     return actions
 
 
 def report_copies(actions: list[tuple]) -> None:
     """Print the plan. The source date is there to catch a long-stale panel."""
-    width = max((len(name) for _, name, _, _ in actions), default=4)
+    width = max((len(name) for _, name, _, _, _ in actions), default=4)
     source_width = max(
-        (len(str(s.relative_to(PROJECT_ROOT))) for _, _, s, _ in actions), default=6
+        (len(str(s.relative_to(PROJECT_ROOT))) for _, _, s, _, _ in actions), default=6
     )
     print(f"  {'action':<8}{'figure':<{width + 2}}{'source':<{source_width + 2}}built")
-    for action, name, source, _ in actions:
+    for action, name, source, _, _ in actions:
         shown = str(source.relative_to(PROJECT_ROOT))
         built = ""
         if source.is_file():
             built = datetime.fromtimestamp(source.stat().st_mtime).strftime("%Y-%m-%d")
         print(f"  {action:<8}{name:<{width + 2}}{shown:<{source_width + 2}}{built}")
     counts: dict[str, int] = {}
-    for action, _, _, _ in actions:
+    for action, _, _, _, _ in actions:
         counts[action] = counts.get(action, 0) + 1
     print("  " + ", ".join(f"{n} {a}" for a, n in sorted(counts.items())))
 
@@ -134,11 +155,11 @@ def publish_figures(paper: Path, dry_run: bool, only: list[str]) -> None:
     print(f"paper: {paper}")
     print(f"figures -> {target}" + ("   [DRY RUN -- nothing written]" if dry_run else ""))
     if not dry_run:
-        for action, _, source, destination in actions:
+        for action, _, _, destination, data in actions:
             if action in ("new", "update"):
-                shutil.copy2(source, destination)
+                destination.write_bytes(data)
     report_copies(actions)
-    copied = [d for a, _, _, d in actions if a in ("new", "update")]
+    copied = [d for a, _, _, d, _ in actions if a in ("new", "update")]
     if copied and not dry_run:
         ignored = [
             d.name
@@ -153,7 +174,7 @@ def publish_figures(paper: Path, dry_run: bool, only: list[str]) -> None:
         print("\ngit status in the paper repo:")
         print("\n".join("  " + line for line in status.splitlines()))
     print("\nNothing was committed. Review and commit in the paper repo yourself.")
-    if any(a == "missing" for a, _, _, _ in actions):
+    if any(a == "missing" for a, _, _, _, _ in actions):
         raise SystemExit("\nsome sources are missing; run the scripts that build them")
 
 

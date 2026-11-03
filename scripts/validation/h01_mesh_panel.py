@@ -17,6 +17,7 @@ from panel_mosaic import PanelMosaic
 
 from analysis import (
     FIG_PATH,
+    capped_dpi,
     plot_zoom_indicator,
     render,
     save_matplotlib_figure,
@@ -160,4 +161,6 @@ panel = PanelMosaic(
     panel_borders=False,
 )
 # NOTE: the name is what main.tex includes, so `just publish-figures` copies it as is.
-panel.write(FIGURE_PATH / "h01_validation_composite")
+panel.write(
+    FIGURE_PATH / "h01_validation_composite", dpi=capped_dpi(panel.fig.get_figwidth())
+)

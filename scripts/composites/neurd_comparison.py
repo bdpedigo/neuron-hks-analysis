@@ -23,7 +23,7 @@ os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:" + os.environ.ge
 
 from panel_mosaic import PanelMosaic  # noqa: E402
 
-from analysis import FIG_PATH  # noqa: E402
+from analysis import FIG_PATH, capped_dpi  # noqa: E402
 
 # NOTE: one column is 1 inch of `figsize`. The panels are about 3.8 by 6.4 inches
 # (A to C) and 6 inches square (D and E), so each fills its cell with little
@@ -63,4 +63,4 @@ pm = PanelMosaic(
 # %%
 out = FIG_PATH / "composites"
 out.mkdir(parents=True, exist_ok=True)
-pm.write(out / "neurd_comparison", dpi=300)
+pm.write(out / "neurd_comparison", dpi=capped_dpi(pm.fig.get_figwidth()))

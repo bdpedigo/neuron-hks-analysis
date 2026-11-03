@@ -26,6 +26,16 @@ FONT_PATH = Path(matplotlib.get_data_path()) / "fonts" / "ttf" / "DejaVuSans.ttf
 MESH_DATA_PATH = DATA_PATH / "computed_mesh_data"
 MODEL_PATH = DATA_PATH / "models"
 
+# The widest PNG a figure writes: 600 dpi across the paper's 6.5 in text width. Wider
+# images add PDF size and nothing a reader can see.
+MAX_PNG_WIDTH = 3900
+
+
+def capped_dpi(width_in: float, dpi: float = 300) -> float:
+    """`dpi`, lowered so that a figure `width_in` inches wide is at most MAX_PNG_WIDTH
+    pixels wide."""
+    return min(dpi, MAX_PNG_WIDTH / width_in)
+
 
 def param_name(**kwargs):
     return "_".join([f"{k}={v}" for k, v in kwargs.items()])
@@ -328,11 +338,19 @@ def save_matplotlib_figure(
         (out_path / subfolder).mkdir(parents=True, exist_ok=True)
 
     for fmt in formats:
+        options = dict(kwargs)
+        if fmt == "png":
+            # NOTE: bbox_inches="tight" crops, so the figure width bounds the image
+            # width. An artist outside the figure can still push it past the cap.
+            dpi = options.get("dpi", plt.rcParams["savefig.dpi"])
+            if dpi == "figure":
+                dpi = fig.dpi
+            options["dpi"] = capped_dpi(fig.get_figwidth(), dpi)
         fig.savefig(
             out_path / subfolder / f"{filename}.{fmt}",
             bbox_inches=bbox_inches,
             pad_inches=pad_inches,
-            **kwargs,
+            **options,
         )
 
     if doc_save:

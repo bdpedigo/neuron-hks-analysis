@@ -4,8 +4,9 @@
 # <paper>/figures/, which is what \includegraphics asks for. Blank lines and lines
 # starting with # are ignored.
 #
-# Run `just publish-figures --dry-run` first, then `just publish-figures`. It copies
-# only. Review and commit in the paper repo yourself.
+# Run `just publish-figures --dry-run` first, then `just publish-figures`. It writes
+# each figure as an RGB PNG with no extra chunks, which pdfTeX embeds without decoding,
+# and commits nothing. Review and commit in the paper repo yourself.
 #
 # NOTE: figures/stat_summaries/ holds April 2026 files with some of these basenames.
 # figures/census/ is the current source. Do not repoint these at stat_summaries.

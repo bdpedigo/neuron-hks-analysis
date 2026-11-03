@@ -10,7 +10,7 @@ status:
 catalog:
     uv run python scripts/tables.py catalog
 
-# Copy the manifest's figures into the paper repo. Commits nothing.
+# Write the manifest's figures into the paper repo, re-encoded for pdfTeX. Commits nothing.
 publish-figures *args:
     uv run python scripts/publish.py figures {{args}}
 

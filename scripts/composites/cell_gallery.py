@@ -24,7 +24,7 @@ os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:" + os.environ.ge
 
 from panel_mosaic import PanelMosaic  # noqa: E402
 
-from analysis import FIG_PATH, cell_type_mapper  # noqa: E402
+from analysis import FIG_PATH, capped_dpi, cell_type_mapper  # noqa: E402
 from analysis.colors import CELL_TYPE_PALETTE  # noqa: E402
 
 gallery = FIG_PATH / "cell_gallery"
@@ -80,4 +80,4 @@ axs["l"].text(
 # %%
 out = FIG_PATH / "composites"
 out.mkdir(parents=True, exist_ok=True)
-pm.write(out / "cell-gallery", dpi=300, verbose=True)
+pm.write(out / "cell-gallery", dpi=capped_dpi(pm.fig.get_figwidth()), verbose=True)

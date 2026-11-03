@@ -30,7 +30,7 @@ os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:" + os.environ.ge
 
 from panel_mosaic import PanelMosaic  # noqa: E402
 
-from analysis import FIG_PATH  # noqa: E402
+from analysis import FIG_PATH, capped_dpi  # noqa: E402
 
 census = FIG_PATH / "census"
 diagrams = FIG_PATH / "legacy" / "diagram_cells"
@@ -106,4 +106,6 @@ pm = PanelMosaic(
 # %%
 out = FIG_PATH / "composites"
 out.mkdir(parents=True, exist_ok=True)
-pm.write(out / "multi_spine_figure", dpi=300, verbose=True)
+pm.write(
+    out / "multi_spine_figure", dpi=capped_dpi(pm.fig.get_figwidth()), verbose=True
+)
