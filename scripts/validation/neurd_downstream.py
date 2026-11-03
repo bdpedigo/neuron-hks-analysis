@@ -324,11 +324,11 @@ def plot_spine_scatter(paired: pl.DataFrame, hue: str, label: str, order=CELL_TY
     return fig
 
 
-def plot_spine_joint(cells, broad_types: list[str], synapses: str):
+def plot_spine_joint(cells, broad_types: list[str], quantity: str):
     """Per cell, the spine proportion of HKS* against NEURD, colored by the broad
     type in `broad_type`. The margins hold the distribution of each broad type,
-    for HKS* on top and NEURD on the right. `synapses` names the synapses in the
-    axis labels."""
+    for HKS* on top and NEURD on the right. `quantity` is the axis label before
+    the labeling. It has two lines in each use, so the panels have the same size."""
     grid = sns.JointGrid(
         data=cells, x=MATCHED, y="NEURD", height=6, ratio=4, space=0.1, xlim=(0, 1), ylim=(0, 1)
     )
@@ -351,8 +351,8 @@ def plot_spine_joint(cells, broad_types: list[str], synapses: str):
     ax.plot([0, 1], [0, 1], color="grey", linestyle="--", linewidth=1, zorder=-1)
     # The wording of the Fig 4A axis (scripts/census/input_compartments.py).
     ax.set(
-        xlabel=f"Proportion of {synapses} on spines\n(HKS, NEURD-labeled synapses)",
-        ylabel=f"Proportion of {synapses} on spines\n(NEURD)",
+        xlabel=f"{quantity}\n(HKS, NEURD-labeled synapses)",
+        ylabel=f"{quantity}\n(NEURD)",
     )
     for i, broad_type in enumerate(reversed(broad_types)):
         ax.text(
@@ -729,7 +729,7 @@ fig, axs = cell_type_dotplot(
     hue="method",
     palette=METHOD_COLORS,
     side="post",
-    xlabel="Proportion of\ncells with\nlabeled inputs",
+    xlabel="Proportion of\ncells with any\nlabeled inputs",
 )
 save_matplotlib_figure(fig, "composite_cell_coverage", subfolder=SUBFOLDER)
 
@@ -739,7 +739,7 @@ save_matplotlib_figure(fig, "composite_cell_coverage", subfolder=SUBFOLDER)
 fig = plot_spine_joint(
     paired.join(broad_types, on="post_pt_root_id").to_pandas(),
     ["inhibitory", "excitatory"],
-    "input synapses",
+    "Proportion of input\nsynapses on spines",
 )
 save_matplotlib_figure(fig, "composite_spine_proportion_scatter", subfolder=SUBFOLDER)
 
@@ -792,7 +792,7 @@ WIDE_COVARIATES = ["n_inputs", "nuc_volume"]
 type_cells = paired.join(cell_covariates, on="post_pt_root_id", how="left").to_pandas()
 wide_rho = cell_type_rho(type_cells, "post_cell_type", BAR_CELL_TYPES, WIDE_COVARIATES)
 ROW_LABELS = {"n_inputs": "Inputs", "nuc_volume": "Nucleus\nvolume"}
-# The size of panel F in scripts/composites/neurd_comparison.py (PanelMosaic
+# The size it had as a panel of scripts/composites/neurd_comparison.py (PanelMosaic
 # get_axis_sizes), so the panel is not scaled.
 fig = plot_rho_by_cell_type(
     wide_rho, BAR_CELL_TYPES, ROW_LABELS, 7, "Spearman ρ with P(spine input)", (13.25, 6.12)
@@ -999,7 +999,7 @@ assert pre_broad_types["pre_pt_root_id"].is_unique().all()
 fig = plot_spine_joint(
     paired_out.join(pre_broad_types, on="pre_pt_root_id").to_pandas(),
     PRE_BROAD_TYPES[::-1],
-    "output synapses\nto excitatory",
+    "Proportion of outputs to\nexcitatory on spines",
 )
 save_matplotlib_figure(fig, "composite_output_spine_proportion_scatter", subfolder=SUBFOLDER)
 

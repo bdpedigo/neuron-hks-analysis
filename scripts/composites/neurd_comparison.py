@@ -7,8 +7,7 @@ scripts/validation/neurd_downstream.py. B is the share of the column cells of ea
 type with a labeled input. C is the share of the output synapses of the proofread
 cells of each type with a label. D is the per-cell input spine proportion, HKS on
 the NEURD-labeled synapses against NEURD. E is D for the outputs of the proofread
-cells to excitatory targets. F is the Spearman rho of the input spine proportion
-with cell covariates, within each cell type.
+cells to excitatory targets.
 
 It reads only figure files, so run the two panel scripts first.
 
@@ -26,10 +25,12 @@ from panel_mosaic import PanelMosaic  # noqa: E402
 
 from analysis import FIG_PATH  # noqa: E402
 
-# NOTE: A to C take their narrowest width. One column is 1 inch of `figsize`.
+# NOTE: one column is 1 inch of `figsize`. The panels are about 3.8 by 6.4 inches
+# (A to C) and 6 inches square (D and E), so each fills its cell with little
+# scaling.
 mosaic = """
-AAAABBBBCCCCDDDDDDDD
-EEEEEEEFFFFFFFFFFFFF
+AAAABBBBCCCC
+DDDDDDEEEEEE
 """
 panel_mapping = {
     "A": FIG_PATH / "compare_to_neurd" / "compare_neurd_hks_by_cell_type_dots.svg",
@@ -37,22 +38,20 @@ panel_mapping = {
     "C": FIG_PATH / "neurd_downstream" / "composite_output_coverage.svg",
     "D": FIG_PATH / "neurd_downstream" / "composite_spine_proportion_scatter.svg",
     "E": FIG_PATH / "neurd_downstream" / "composite_output_spine_proportion_scatter.svg",
-    "F": FIG_PATH / "neurd_downstream" / "composite_trend_rho_by_cell_type.svg",
 }
 label_mapping = {
-    "A": "A) Accuracy on the\nvalidation synapses",
-    "B": "B) Column cells with\nlabeled inputs",
-    "C": "C) Labeled outputs of\nthe proofread cells",
+    "A": "A) Accuracy on\nvalidation synapses",
+    "B": "B) Label coverage of\ninputs to column cells",
+    "C": "C) Label coverage of\noutputs of proofread cells",
     "D": "D) Input spine proportion per cell",
     "E": "E) Output spine proportion per cell",
-    "F": "F) Trends of the input spine proportion within each cell type",
 }
 
 pm = PanelMosaic(
     mosaic,
     panel_mapping=panel_mapping,
     label_mapping=label_mapping,
-    figsize=(20, 14),
+    figsize=(12, 13),
     layout="constrained",
     label_fontsize=20,
     label_pos=(0, 1.0),
