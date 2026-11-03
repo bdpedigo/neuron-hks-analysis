@@ -123,7 +123,12 @@ train = cells[
     mask & cells["is_column"] & cells["broad_type"].isin(["excitatory", "inhibitory"])
 ]
 
-transformer = QuantileTransformer(output_distribution="normal")
+# NOTE: `subsample` defaults to 10,000 and there are about 75,000 cells, so an
+# unseeded transformer draws a different sample every run. That moves the LDA boundary
+# below, which flips a few borderline cells in the `broad_type_lda_prediction` filters,
+# which moves the S6 Pearson values in the second decimal. Pin the seed so a re-run
+# reproduces the published numbers.
+transformer = QuantileTransformer(output_distribution="normal", random_state=0)
 transformer.fit(X[mask])
 lda = LinearDiscriminantAnalysis()
 lda.fit(transformer.transform(train[features]), train["broad_type"].astype(str))
