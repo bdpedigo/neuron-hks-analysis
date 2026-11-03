@@ -29,37 +29,16 @@ import sys
 
 import numpy as np
 import polars as pl
-from deltalake import DeltaTable
 
 from analysis import FIG_PATH, Tables
 from analysis.census_inputs import glue, post_cells
-from analysis.sources import BASE_CLOUD_PATH, DATASTACK, MICRONS_SYNAPSE_RESOLUTION
+from analysis.products.deployment_logs import WIDE_RUNS, dollars_per_step_hour
+from analysis.sources import MICRONS_SYNAPSE_RESOLUTION
 from analysis.stash import Stash
 
 SCRATCH = "--scratch" in sys.argv
 OUT_PATH = FIG_PATH / "cost" / ("_scratch" if SCRATCH else "")
 CABLE = "dendrite_cable_length_um"
-
-# The full-run cluster session, 2026-10-28 10:00Z to the cluster delete (ssa-backlog
-# TASK-49): Spot workers $329 and the default pool $1, closed at each pool delete.
-SESSION_DOLLARS = 331.0
-# Every run of that session, by datastack. It also ran the H01 run and the wide-root
-# runs, so the dollars per step-hour hold some work outside the census.
-SESSION_RUNS = {
-    DATASTACK: [
-        "run-20261028-095858-243c",
-        "run-20261028-140637-c62c",
-        "run-20261028-143147-ddc2",
-        "run-20261028-190710-318d",
-        "run-20261028-193551-476c",
-    ],
-    "h01_c3_flat": ["run-20261028-164729-6ba4"],
-}
-# The runs of the session on a wide root set (roots with no neuron nucleus too).
-WIDE_RUNS = ["run-20261028-095858-243c", "run-20261028-140637-c62c"]
-# The last full run. Its step hashes are the ones the census tables hold.
-FINAL_RUN = "run-20261028-193551-476c"
-LOG_COLUMNS = ["run_id", "root_id", "step", "step_hash", "outcome", "elapsed_s"]
 
 # The side of the cubes that the synapses are counted in, in µm.
 BIN_UM = 10
@@ -186,72 +165,15 @@ print(f"pooled cable per synapse {pooled_rate:.3f} um")
 
 
 # %% STEP-HOURS FROM THE LOG TABLE
-def log_path(datastack: str) -> str:
-    return str(BASE_CLOUD_PATH / "logs" / "v3" / datastack)
-
-
-def read_log(datastack: str) -> pl.DataFrame:
-    table = DeltaTable(log_path(datastack)).to_pyarrow_table(columns=LOG_COLUMNS)
-    return pl.from_arrow(table)
-
-
-def run_hours() -> pl.DataFrame:
-    """The summed `elapsed_s` per run and root, over every run of the session."""
-    return pl.concat(
-        read_log(datastack)
-        .filter(pl.col("run_id").is_in(runs))
-        .group_by("run_id", "root_id")
-        .agg(pl.col("elapsed_s").sum())
-        .with_columns(datastack=pl.lit(datastack))
-        for datastack, runs in SESSION_RUNS.items()
-    )
-
-
-def written_hours() -> pl.DataFrame:
-    """The summed `elapsed_s` per root and step of the attempts that wrote the census
-    tables: the ok rows at the step hashes of `FINAL_RUN`, in any run, and the loader
-    rows (no hash) of the same run and root."""
-    rows = read_log(DATASTACK)
-    final_hashes = (
-        rows.filter(pl.col("run_id") == FINAL_RUN)
-        .select("step", "step_hash")
-        .unique()
-        .drop_nulls()
-    )
-    written = rows.join(final_hashes, on=["step", "step_hash"], how="semi").filter(
-        pl.col("outcome") == "ok"
-    )
-    loaders = rows.filter(pl.col("step_hash").is_null()).join(
-        written.select("run_id", "root_id").unique(),
-        on=["run_id", "root_id"],
-        how="semi",
-    )
-    return (
-        pl.concat([written, loaders])
-        .group_by("root_id", "step")
-        .agg(pl.col("elapsed_s").sum())
-    )
-
-
-# The key holds the Delta version of each log table, so a new log write gives a new
-# stash.
-log_versions = {ds: DeltaTable(log_path(ds)).version() for ds in SESSION_RUNS}
-log_params = dict(
-    session_runs=SESSION_RUNS, final_run=FINAL_RUN, log_versions=log_versions
-)
-run_stash = Stash("cost/run_hours", **log_params)
-written_stash = Stash("cost/written_hours", **log_params)
-if not run_stash.exists():
-    run_stash.save(run_hours())
-if not written_stash.exists():
-    written_stash.save(written_hours())
-runs = run_stash.load()
-written = written_stash.load().join(
-    cells.select(pl.col("pt_root_id").alias("root_id")), on="root_id", how="semi"
+runs = Tables["session_root_hours"].collect()
+written = (
+    Tables["census_step_hours"]
+    .collect()
+    .join(cells.select(pl.col("pt_root_id").alias("root_id")), on="root_id", how="semi")
 )
 
 session_hours = runs["elapsed_s"].sum() / 3600
-dollars_per_hour = SESSION_DOLLARS / session_hours
+dollars_per_hour = dollars_per_step_hour()
 census_hours = written["elapsed_s"].sum() / 3600
 census_dollars = census_hours * dollars_per_hour
 print(f"session {session_hours:,.0f} step-hours, ${dollars_per_hour:.4f} per step-hour")
