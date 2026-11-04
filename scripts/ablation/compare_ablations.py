@@ -8,8 +8,8 @@ from scipy.stats import wilcoxon
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 
-from analysis import FIG_PATH, Tables, save_matplotlib_figure, set_matplotlib_theme
-from analysis.models import MODEL_SPECS, feature_columns, make_model
+from analysis import FIG_PATH, Stash, Tables, save_matplotlib_figure, set_matplotlib_theme
+from analysis.models import MODEL_SPECS, RF_PARAMS, feature_columns, make_model
 from analysis.products.features import add_distance_to_nucleus
 
 OUT_PATH = FIG_PATH / "ablation"
@@ -17,6 +17,8 @@ ARMS = ["proposed", "no_cluster", "no_chunk", "no_simplify", "full_res_vertex"]
 CATEGORIES = ["soma", "shaft", "spine"]
 N_SPLITS = 10
 SPEC = MODEL_SPECS["ssa_model_full"]
+# Part of the stash key of the split counts. Bump it after a change to `root_splits`.
+SPLITS_VERSION = 1
 
 set_matplotlib_theme()
 pd.set_option("display.width", 200)
@@ -63,54 +65,52 @@ def fit_and_predict(train: pd.DataFrame, test: pd.DataFrame, columns, seed: int)
     return model.predict(test[columns])
 
 
-def root_splits(rows: pd.DataFrame, columns: list[str]):
-    """Per split of the roots: the accuracy pooled over its test labels, and the
-    confusion counts summed over splits. The splits of the original Fig 2D."""
+def root_splits(rows: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Per split of the roots: the confusion counts of its test labels, one row per
+    true and predicted label. The splits of the original Fig 2D."""
     roots = np.sort(rows["root_id"].unique())
-    scores = []
-    matrix = np.zeros((3, 3), dtype=int)
+    counts = []
     for fold in range(N_SPLITS):
-        train_roots, test_roots = train_test_split(roots, test_size=0.2, random_state=fold)
+        train_roots, test_roots = train_test_split(roots, test_size=0.2, random_state=fold*8888)
         train = rows[rows["root_id"].isin(train_roots)]
         test = rows[rows["root_id"].isin(test_roots)]
-        predicted = fit_and_predict(train, test, columns, seed=fold)
-        scores.append({"fold": fold, "accuracy": (predicted == test["tag"].to_numpy()).mean()})
-        matrix += confusion_matrix(test["tag"], predicted, labels=CATEGORIES)
-    return pd.DataFrame(scores), matrix
-
-
-def leave_one_cell_out(rows: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    """Per held-out cell: its accuracy."""
-    scores = []
-    for fold, held_out in enumerate(sorted(rows["root_id"].unique())):
-        train = rows[rows["root_id"] != held_out]
-        test = rows[rows["root_id"] == held_out]
-        predicted = fit_and_predict(train, test, columns, seed=fold)
-        scores.append(
-            {
-                "root_id": held_out,
-                "accuracy": (predicted == test["tag"].to_numpy()).mean(),
-                "n_labels": len(test),
-            }
+        predicted = fit_and_predict(train, test, columns, seed=fold*8888)
+        matrix = pd.DataFrame(
+            confusion_matrix(test["tag"], predicted, labels=CATEGORIES),
+            index=pd.Index(CATEGORIES, name="true"),
+            columns=pd.Index(CATEGORIES, name="predicted"),
         )
-    return pd.DataFrame(scores)
+        counts.append(matrix.stack().rename("count").reset_index().assign(fold=fold))
+    return pd.concat(counts, ignore_index=True)
 
 
-scores_by_arm = {}
-cell_scores_by_arm = {}
-matrices = {}
+counts_by_arm = {}
 for arm in ARMS:
-    rows = arm_rows(arm)
-    columns = feature_columns(SPEC, rows.columns)
-    # NOTE: a synapse whose vertex is in no domain has null features; the forest
-    # takes missing values, as in the main model.
-    print(arm, f"{rows['domain_x'].isna().mean():.4f} of rows with no domain")
-    scores, matrices[arm] = root_splits(rows, columns)
-    scores_by_arm[arm] = scores.assign(arm=arm)
-    cell_scores_by_arm[arm] = leave_one_cell_out(rows, columns).assign(arm=arm)
-    print(arm, len(columns), "columns", f"mean test accuracy {scores['accuracy'].mean():.4f}")
-scores = pd.concat(scores_by_arm.values(), ignore_index=True)
-cell_scores = pd.concat(cell_scores_by_arm.values(), ignore_index=True)
+    splits = Stash(
+        f"ablation/root_splits/{arm}",
+        inputs=[Tables["ablation_labeled_features"], Tables["root_nuclei"]],
+        spec=SPEC,
+        forest=RF_PARAMS,
+        n_splits=N_SPLITS,
+        categories=CATEGORIES,
+        version=SPLITS_VERSION,
+    )
+    if not splits.exists():
+        rows = arm_rows(arm)
+        columns = feature_columns(SPEC, rows.columns)
+        # NOTE: a synapse whose vertex is in no domain has null features; the forest
+        # takes missing values, as in the main model.
+        print(arm, len(columns), "columns", f"{rows['domain_x'].isna().mean():.4f} of rows with no domain")
+        splits.save(root_splits(rows, columns))
+    counts_by_arm[arm] = splits.load().to_pandas().assign(arm=arm)
+counts = pd.concat(counts_by_arm.values(), ignore_index=True)
+scores = (
+    counts.assign(correct=counts["count"].where(counts["true"] == counts["predicted"], 0))
+    .groupby(["arm", "fold"])[["correct", "count"]]
+    .sum()
+    .eval("accuracy = correct / count")
+    .reset_index()
+)
 
 # %% EACH ARM AGAINST PROPOSED, PAIRED BY SPLIT, AS IN THE ORIGINAL FIG 2D
 paired = scores.pivot(index="fold", columns="arm", values="accuracy")[ARMS]
@@ -128,20 +128,6 @@ for arm in ARMS[1:]:
         result.pvalue,
     ]
 print(summary.round(4))
-
-# %% SIDE TABLE: PER HELD-OUT CELL, THE MEAN OVER CELLS AND THE ACCURACY POOLED OVER LABELS
-cell_scores["correct"] = cell_scores["accuracy"] * cell_scores["n_labels"]
-by_arm = cell_scores.groupby("arm")
-print(
-    pd.DataFrame(
-        {
-            "mean_over_cells": by_arm["accuracy"].mean(),
-            "pooled_over_labels": by_arm["correct"].sum() / by_arm["n_labels"].sum(),
-        }
-    )
-    .reindex(ARMS)
-    .round(4)
-)
 
 # %% FIGURES
 palette = dict(zip(ARMS, sns.color_palette("Set2", len(ARMS))))
@@ -179,7 +165,11 @@ for name, ylim in [("accuracy", (0, 1)), ("accuracy_zoom", None)]:
     ax.tick_params(axis="x", rotation=45)
     save_matplotlib_figure(fig, name, out_path=OUT_PATH)
 
-matrix = pd.DataFrame(matrices["proposed"], index=CATEGORIES, columns=CATEGORIES)
+matrix = (
+    counts[counts["arm"] == "proposed"]
+    .pivot_table(index="true", columns="predicted", values="count", aggfunc="sum")
+    .reindex(index=CATEGORIES, columns=CATEGORIES)
+)
 fig, ax = plt.subplots(figsize=(4, 4))
 sns.heatmap(
     matrix.div(matrix.sum(axis=1), axis=0), annot=True, fmt=".2f", cmap="Greys",

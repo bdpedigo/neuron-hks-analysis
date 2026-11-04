@@ -21,7 +21,7 @@ figures/composites/stat_summary_figure.png
 figures/composites/multi_spine_figure.png
 
 # Figure 6
-figures/h01_validation/h01_validation_composite.png
+figures/composites/h01_validation_composite.png
 
 # Supplement: the NEURD comparison (main.tex includes it as neurd_comparison.png)
 figures/composites/neurd_comparison.png

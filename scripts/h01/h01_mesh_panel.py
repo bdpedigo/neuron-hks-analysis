@@ -1,11 +1,11 @@
 # %%
-"""Fig 6D and the Fig 6 composite: the deployment predictions on the mesh of an
+"""Fig 6D: the deployment predictions on the mesh of an
 H01 cell of the validation cohort.
 
 Ported from meshrep/sandbox/h01_validation.py. Each vertex takes the `pred_label`
 of its domain in the deployment `h01` job; a vertex in no domain is `unknown`.
-The cameras are those of the published figure. The composite reads the 6A-C
-files that h01_validation.py writes.
+The cameras are those of the published figure. The composite is
+scripts/composites/h01_validation_figure.py.
 """
 
 import numpy as np
@@ -13,11 +13,9 @@ import pandas as pd
 import pyvista as pv
 from matplotlib import pyplot as plt
 from matplotlib.patches import ConnectionPatch
-from panel_mosaic import PanelMosaic
 
 from analysis import (
     FIG_PATH,
-    capped_dpi,
     plot_zoom_indicator,
     render,
     save_matplotlib_figure,
@@ -64,22 +62,21 @@ cpos = [
     (0.8138798508621828, -0.5511285704496345, 0.1840024108393515),
 ]
 zoom_cposes = [
-    [
-        (3084920.95572025, 920038.2818243258, 114045.11609088107),
-        (3083048.9269001596, 901227.6474915872, 123062.72485891893),
-        (0.08651503872321023, 0.4236482042646363, 0.9016858361414304),
-    ],
-    [
-        (3026641.4667104413, 919514.605073098, 114380.59051045949),
-        (3011183.102083987, 910624.5495262924, 107531.50828812862),
-        (0.4794479690219866, -0.8758609178054817, 0.05474758133133998),
-    ],
+    [(3083460.252571646, 902456.7085839356, 141675.18488479272),
+     (3079915.332538704, 900494.8473509091, 120925.84017969745),
+     (0.8370716745993685, -0.5392991948147503, -0.0920184223705852)],
+    [(2993682.8619351415, 915194.2740472725, 116025.7183485223),
+    (3007461.213245588, 917333.9373609251, 108900.1364244689),
+    (0.43208245778048426, -0.6284796886255994, 0.646775100528341)],
     [
         (2955513.629277105, 929265.3024383206, 85084.00739455571),
         (2952106.642677461, 934648.834441879, 84674.0923590454),
         (0.05134428147586535, -0.04347647167766007, -0.9977342136912962),
     ],
 ]
+
+#%%
+INTERACTIVE = False
 
 name = f"h01_{ROOT_ID}_validation"
 plotter = pv.Plotter(window_size=(600, 800), off_screen=not INTERACTIVE)
@@ -104,8 +101,8 @@ inset_bounds = [
     (0.5, -0.05, 0.4, 0.4),
 ]
 label_positions = [
-    (0.25, 0.715),
-    (0.39, 0.505),
+    (0.255, 0.71),
+    (0.373, 0.489),
     (0.43, 0.305),
 ]
 fig, ax = plt.subplots(1, 1, figsize=(6, 8), dpi=500, gridspec_kw=dict(hspace=0, wspace=0))
@@ -133,34 +130,3 @@ for i, (bounds, label_position) in enumerate(zip(inset_bounds, label_positions))
         )
     )
 save_matplotlib_figure(fig, f"composite_{name}", subfolder=SUBFOLDER, formats=["png"])
-
-# %%
-# The Fig 6 composite.
-panel = PanelMosaic(
-    """
-    AD
-    BD
-    CD
-    """,
-    panel_mapping={
-        "A": FIGURE_PATH / "h01_microns_score_comparison_short.png",
-        "B": FIGURE_PATH / "h01_confusion_matrix.svg",
-        "C": FIGURE_PATH / "h01_calibration_curve_binary.png",
-        "D": FIGURE_PATH / f"composite_{name}.png",
-    },
-    label_mapping={"A": "A)", "B": "B)", "C": "C)", "D": "D)"},
-    gridspec_kw={
-        "height_ratios": [5, 4, 4],
-        "width_ratios": [1, 2],
-        "wspace": 0,
-        "hspace": 0.0,
-    },
-    figsize=(17, 15),
-    label_fontsize=50,
-    layout="constrained",
-    panel_borders=False,
-)
-# NOTE: the name is what main.tex includes, so `just publish-figures` copies it as is.
-panel.write(
-    FIGURE_PATH / "h01_validation_composite", dpi=capped_dpi(panel.fig.get_figwidth())
-)
