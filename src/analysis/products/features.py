@@ -7,6 +7,7 @@ from pathlib import Path
 
 import polars as pl
 from tqdm.auto import tqdm
+from upath import UPath
 
 from ..sources import DATASTACK, cutoff, deployment_path, pin_params
 from . import labels  # noqa: F401 -- registers "labels", whose cache key P2 reads
@@ -16,6 +17,13 @@ from .deployment import query_latest_attempts, scan_roots
 from .partitions import hash_partition
 
 
+def _table_path(product: str, datastack: str, paths: dict[str, UPath] | None) -> UPath:
+    # A product in `paths` is read from there, for example an ablation arm's table.
+    if paths and product in paths:
+        return paths[product]
+    return deployment_path(product, datastack)
+
+
 def synapse_vertex_join(
     synapses: pl.DataFrame,
     vertex_product: str,
@@ -23,19 +31,21 @@ def synapse_vertex_join(
     *,
     as_of: datetime,
     datastack: str = DATASTACK,
+    paths: dict[str, UPath] | None = None,
 ) -> pl.DataFrame:
     """`root_id`, `synapse_id` and `column` of the vertex each synapse maps to, from
     the per-vertex deployment table `vertex_product` (for example `vertex_domains`),
     as the deployment tables were at `as_of`.
 
     A synapse that `synapse_mapping` does not hold has no row. A mapped synapse on
-    a root that `vertex_product` does not hold has a null `column`.
+    a root that `vertex_product` does not hold has a null `column`. `paths` maps a
+    product to the table to read in place of its pin.
     """
     root_ids = synapses["root_id"].unique().to_list()
     mapping_lf, vertices_lf = query_latest_attempts(
         [
-            scan_roots(deployment_path("synapse_mapping", datastack), root_ids, as_of=as_of),
-            scan_roots(deployment_path(vertex_product, datastack), root_ids, as_of=as_of),
+            scan_roots(_table_path("synapse_mapping", datastack, paths), root_ids, as_of=as_of),
+            scan_roots(_table_path(vertex_product, datastack, paths), root_ids, as_of=as_of),
         ]
     )
     mapping = (
@@ -65,20 +75,21 @@ def synapse_domain_join(
     *,
     as_of: datetime,
     datastack: str = DATASTACK,
+    paths: dict[str, UPath] | None = None,
 ) -> pl.DataFrame:
     """`synapses` (with `root_id` and `synapse_id`) left-joined to the row of
     `domain_product` (a per-domain deployment table) for the domain of each synapse,
     as the deployment tables were at `as_of`.
 
     The domain columns are null for a synapse whose root the deployment has not
-    processed.
+    processed. `paths` is as in `synapse_vertex_join`.
     """
     root_ids = synapses["root_id"].unique().to_list()
     synapse_domains = synapse_vertex_join(
-        synapses, "vertex_domains", "domain_id", as_of=as_of, datastack=datastack
+        synapses, "vertex_domains", "domain_id", as_of=as_of, datastack=datastack, paths=paths
     )
     (domain_rows_lf,) = query_latest_attempts(
-        [scan_roots(deployment_path(domain_product, datastack), root_ids, as_of=as_of)]
+        [scan_roots(_table_path(domain_product, datastack, paths), root_ids, as_of=as_of)]
     )
     domain_rows = (
         domain_rows_lf.join(
@@ -95,14 +106,20 @@ def synapse_domain_join(
     )
 
 
-def synapse_features(synapses: pl.DataFrame, *, as_of: datetime) -> pl.DataFrame:
+def synapse_features(
+    synapses: pl.DataFrame, *, as_of: datetime, paths: dict[str, UPath] | None = None
+) -> pl.DataFrame:
     """`synapses` left-joined to its domain features (see `synapse_domain_join`)."""
-    return synapse_domain_join(synapses, "domain_features", as_of=as_of)
+    return synapse_domain_join(synapses, "domain_features", as_of=as_of, paths=paths)
 
 
-def _write_part(synapses: pl.DataFrame, part: Path, as_of: datetime) -> None:
+def _write_part(
+    synapses: pl.DataFrame, part: Path, as_of: datetime, paths: dict[str, UPath] | None
+) -> None:
     tmp = part.with_suffix(".tmp")
-    synapse_features(synapses, as_of=as_of).write_parquet(tmp, compression="snappy")
+    synapse_features(synapses, as_of=as_of, paths=paths).write_parquet(
+        tmp, compression="snappy"
+    )
     tmp.rename(part)
 
 
@@ -113,8 +130,10 @@ def write_synapse_features(
     as_of: datetime,
     n_chunks: int = 64,
     max_workers: int = 4,
+    paths: dict[str, UPath] | None = None,
 ) -> None:
-    """Write `synapse_features(synapses, as_of=as_of)` to `out` as a single parquet file.
+    """Write `synapse_features(synapses, as_of=as_of, paths=paths)` to `out` as a single
+    parquet file.
 
     Up to `max_workers` chunks of roots run at once, and peak memory is about that
     many chunks. Each chunk is written as a part, and the parts are combined into
@@ -139,7 +158,7 @@ def write_synapse_features(
     todo = [(chunk_synapses, part) for chunk_synapses, part in todo if not part.exists()]
     # NOTE: threads are enough here, because Polars releases the GIL in collect.
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(_write_part, *item, as_of) for item in todo]
+        futures = [pool.submit(_write_part, *item, as_of, paths) for item in todo]
         for future in tqdm(as_completed(futures), total=len(futures)):
             future.result()
     # NOTE: the parts are combined in a streaming pass, so the whole table is

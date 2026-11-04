@@ -35,6 +35,35 @@ STEP_PINS = {
 }
 
 
+# The ablation runs of condensed_spectral (ssa-backlog TASK-77): each arm turns
+# off one or more of its steps, on the same 40 cells, and writes its own tables
+# (meshmash-deployment jobs/strawman/write_specs.py). proposed has the params of
+# the pinned tables, so its hashes are those of STEP_PINS.
+ABLATION_CLOUD_PATH = UPath("gs://bdp-ssa/meshmash-strawman")
+ABLATION_PINS = {
+    "proposed": {
+        "vertex_domains": ("s4", "p-2e737b09a92af64d"),
+        "domain_features": ("s4", "p-e758527c9d981378"),
+    },
+    "no_cluster": {
+        "vertex_domains": ("s4", "p-0eb0ed6937428e17"),
+        "domain_features": ("s4", "p-c70ebe61c1afde95"),
+    },
+    "no_chunk": {
+        "vertex_domains": ("s4", "p-81e12ede41da3707"),
+        "domain_features": ("s4", "p-b28c980588dca803"),
+    },
+    "no_simplify": {
+        "vertex_domains": ("s4", "p-fdc366d3db276387"),
+        "domain_features": ("s4", "p-0657e0d7fed2f06a"),
+    },
+    "full_res_vertex": {
+        "vertex_domains": ("s4", "p-a68b4a5ed58942ae"),
+        "domain_features": ("s4", "p-5fe88990187337eb"),
+    },
+}
+
+
 class UnpinnedError(KeyError):
     pass
 
@@ -50,6 +79,12 @@ def deployment_path(product: str, datastack: str = DATASTACK) -> UPath:
     """The deployment table of `product` for `datastack`, at its pin."""
     version, params = step_pin(product)
     return BASE_CLOUD_PATH / datastack / product / version / params
+
+
+def ablation_path(arm: str, product: str, datastack: str = DATASTACK) -> UPath:
+    """The table of `product` that the ablation arm `arm` wrote for `datastack`."""
+    version, params = ABLATION_PINS[arm][product]
+    return ABLATION_CLOUD_PATH / datastack / product / version / params
 
 
 # NOTE: H01 is read at the time the labels were made (v1054), which CAVE no
@@ -110,6 +145,11 @@ CUTOFFS = {
     # (meshmash-deployment jobs/point_label_roots, last data commit 2026-10-28
     # 01:32 UTC). The synapse rows stay at "training".
     "training_points": datetime(2026, 10, 28, 1, 40, tzinfo=timezone.utc),
+    # The ablation tables (`ABLATION_PINS`). The 5 runs of the light phase
+    # (run-20261103-182453-2e32 and the 4 after it) finished all 40 roots, one
+    # attempt each, with nothing left staged. The last data commit was no_chunk's,
+    # at 2026-11-04 07:18 UTC.
+    "ablation": datetime(2026, 11, 4, 7, 30, tzinfo=timezone.utc),
 }
 
 

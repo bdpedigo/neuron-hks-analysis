@@ -50,17 +50,24 @@ def pre_synapses(scratch: bool) -> pl.LazyFrame:
 
 
 def post_cells(scratch: bool) -> pl.DataFrame:
-    """One row per neuron with its `post_*` aggregation, the columns of `cell_info`
-    and `is_column`. The scratch stand-in holds only the column cells."""
+    """One row per neuron with a known synapse (spine, shaft or soma), with its
+    `post_*` aggregation, the columns of `cell_info` and `is_column`. These are the
+    neurons of every whole-dataset count. The scratch stand-in holds only the column
+    cells."""
+    has_known = pl.col("post_total_known_synapses") > 0
     if scratch:
         return (
-            Tables["proofread_cell_info"].lazy().filter(pl.col("is_column")).collect()
+            Tables["proofread_cell_info"]
+            .lazy()
+            .filter(pl.col("is_column"), has_known)
+            .collect()
         )
     flags = Tables["cell_selection"].lazy().select("pt_root_id", "is_column")
     return (
         Tables["post_aggregation"]
         .lazy()
         .rename({"post_pt_root_id": "pt_root_id"})
+        .filter(has_known)
         .join(Tables["cell_info"].lazy(), on="pt_root_id", how="inner")
         .join(flags, on="pt_root_id", how="left")
         .with_columns(pl.col("is_column").fill_null(False))

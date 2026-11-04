@@ -65,18 +65,14 @@ glue(
 )
 glue(
     SCRATCH,
-    summary_n_neurons_ran=len(cells.query("post_total_known_synapses > 0")),
+    summary_n_neurons_ran=len(cells),
     format="{:,d}",
 )
 for broad_type in ["excitatory", "inhibitory"]:
     table = cells.query("broad_type == @broad_type")
     glue(
         SCRATCH,
-        **{
-            f"summary_n_{broad_type}_neurons": len(
-                table.query("post_total_known_synapses > 0")
-            )
-        },
+        **{f"summary_n_{broad_type}_neurons": len(table)},
         format="{:,d}",
     )
     glue(
@@ -86,23 +82,23 @@ for broad_type in ["excitatory", "inhibitory"]:
         format="{:.1f} million",
     )
 
-# The input and output synapse counts of the proofread cells, by cell type.
+# The input and output synapse counts of the proofread cells, by cell type. The cell
+# counts are `column_summary_n_<cell_type>`, from input_compartments.py.
 proofread = (
     Tables["proofread_cell_info"]
     .lazy()
     .group_by("cell_type")
     .agg(
-        pl.len().alias("n_cells"),
         pl.col("post_total_known_synapses").sum(),
         pl.col("pre_total_known_synapses").sum(),
     )
     .drop_nulls("cell_type")
     .collect()
 )
-for col in ["n_cells", "post_total_known_synapses", "pre_total_known_synapses"]:
+for col in ["post_total_known_synapses", "pre_total_known_synapses"]:
     glue(
         SCRATCH,
-        prefix=f"summary_{col}_by_cell_type_",
+        prefix=f"column_summary_{col}_by_cell_type_",
         **dict(zip(proofread["cell_type"].cast(pl.String), proofread[col])),
         format="{:,d}",
     )

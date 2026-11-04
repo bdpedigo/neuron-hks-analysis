@@ -119,6 +119,12 @@ save_variables(
     prefix=f"column_summary_{x}_",
     **weighted_means(column_cells, "broad_type", x, weight_x).to_dict(),
 )
+p_5P_ET = column_cells.query("cell_type == '5P-ET'")[x]
+save_variables(
+    format="{:.1f}%",
+    prefix=f"column_summary_{x}_",
+    **{"5P-ET_min": p_5P_ET.min(), "5P-ET_max": p_5P_ET.max()},
+)
 
 # %% S4: COMPARTMENTS OF THE SYNAPSES BETWEEN CELL TYPE PAIRS OF THE COLUMN
 column_ids = column_cells.index.to_list()

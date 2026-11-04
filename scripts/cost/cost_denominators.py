@@ -7,15 +7,15 @@ Our side:
   its cell type (about 1% of the neurons).
 - Cost: the dollars per step-hour of the full-run cluster session, times the
   step-hours that wrote the census tables. Both come from the deployment log table.
-- The MICrONS volume and synapse density: every synapse with a post root, counted
-  in cubes of `BIN_UM`. The volume is the bounding box of the cubes, the cubes that
-  hold a synapse, or the inner cubes (all six face neighbors hold a synapse).
-  Partly filled cubes at the edge make the occupied volume a little high.
+- The MICrONS synapse density: every synapse with a post root, counted in cubes of
+  `BIN_UM`. The density is the mean count of the inner cubes (all six face
+  neighbors hold a synapse), which leaves out the partly filled cubes at the edge.
 
 The extrapolation is a table with one row per estimate: a quantity (synapses,
 dendrite cable or neurons), times our cost per unit of it, times an assumed density
-of it (from MICrONS or from the literature). The columns are the target volumes. A
-target with no source is a placeholder: its column says so, and it is not glued.
+of it (from MICrONS for synapses, or from the literature). The columns are the
+target volumes. A target with no source is a placeholder: its column says so, and it
+is not glued.
 
 Scope: full run. Run it with `--scratch` until `post_aggregation` exists (see
 `analysis.census_inputs`). The synapse binning reads all 337M synapses in chunks of
@@ -27,7 +27,6 @@ post-root buckets.
 # %%
 import sys
 
-import numpy as np
 import polars as pl
 
 from analysis import FIG_PATH, Tables
@@ -48,17 +47,16 @@ BUCKETS_PER_CHUNK = 32
 BOOK = "Braitenberg & Schüz 1998"
 # The quantities that the cost is extrapolated by, and their units.
 QUANTITIES = {"synapses": "synapse", "dendrite cable": "m", "neurons": "neuron"}
-# Densities in mouse cortex, as (quantity, assumed density, value per mm³).
+# Densities in mouse cortex, as (quantity, value per mm³).
 BOOK_DENSITIES = [
     # Ch. 5 "Density of Synapses": the grand average of the sample.
-    ("synapses", "ch. 5", 7.2e8),
+    ("synapses", 7.2e8),
     # Ch. 11 "Density of Dendrites": 276 to 460 m from Golgi stains (3 to 5 mm per
-    # neuron), 456 m from electron micrographs, 0.4 km in the Fig. 80 summary.
-    ("dendrite cable", "ch. 11, Golgi low", 276.0),
-    ("dendrite cable", "Fig. 80", 400.0),
-    ("dendrite cable", "ch. 11, electron micrographs", 456.0),
+    # neuron), 456 m from electron micrographs, 0.4 km in the Fig. 80 summary. The
+    # value here is the middle of the Golgi range.
+    ("dendrite cable", 368.0),
     # Ch. 4 "Density of Neurons": the average of the sample.
-    ("neurons", "ch. 4", 9.2e4),
+    ("neurons", 9.2e4),
 ]
 # Target volumes in mm³, as (name, mm³, source).
 TARGETS = [
@@ -69,9 +67,6 @@ TARGETS = [
     # (ssa-backlog TASK-78). The cortical densities stand in for the whole brain.
     ("mouse brain", 500.0, "approximate, no citation"),
 ]
-# The volume on the MICrONS site, for the whole dataset: "a 1.4mm x .87mm x .84 mm
-# volume of cortex" (microns-explorer.org/cortical-mm3).
-MICRONS_SITE_MM3 = 1.4 * 0.87 * 0.84
 
 
 # %% MICRONS SYNAPSE CUBES
@@ -125,19 +120,13 @@ cubes = cubes.with_columns(
 cube_mm3 = (BIN_UM / 1000) ** 3
 inner = cubes.filter("inner")
 volume_synapses = cubes["n_synapses"].sum()
-volumes_mm3 = {
-    "bounding box": np.prod([cubes[a].max() - cubes[a].min() + 1 for a in "xyz"])
-    * cube_mm3,
-    "occupied cubes": cubes.height * cube_mm3,
-    "inner cubes": inner.height * cube_mm3,
-    "MICrONS site": MICRONS_SITE_MM3,
-}
+# The local density of all synapses, away from the partly filled edge cubes.
+synapses_per_mm3 = inner["n_synapses"].mean() / cube_mm3
 print(f"{volume_synapses / 1e6:.1f} million synapses with a post root")
-for name, mm3 in volumes_mm3.items():
-    print(f"  {name}: {mm3:.3f} mm³")
+print(f"{inner.height:,} inner cubes, mean density {synapses_per_mm3:.3g} per mm³")
 
 # %% DENDRITE CABLE
-cells = post_cells(SCRATCH).filter(pl.col("post_total_known_synapses") > 0)
+cells = post_cells(SCRATCH)
 cells = cells.join(
     Tables["cellpax_features"]
     .lazy()
@@ -196,12 +185,11 @@ print(
 )
 
 # %% PER-UNIT COSTS
-n_synapses = cells["post_total_synapses"].sum()
-dollars_per_unit = {
-    "synapses": census_dollars / n_synapses,
-    "dendrite cable": census_dollars / total_m,
-    "neurons": census_dollars / len(cells),
-}
+# NOTE: the known synapses, the same total that whole_dataset.py glues.
+n_synapses = cells["post_total_known_synapses"].sum()
+# The units of each quantity that the census ran.
+units_run = {"synapses": n_synapses, "dendrite cable": total_m, "neurons": len(cells)}
+dollars_per_unit = {q: census_dollars / n for q, n in units_run.items()}
 print(f"${dollars_per_unit['dendrite cable']:.2f} per m of dendrite")
 print(f"${dollars_per_unit['neurons'] * 1000:.2f} per thousand neurons")
 print(f"${dollars_per_unit['synapses'] * 1e6:.2f} per million synapses")
@@ -213,82 +201,32 @@ print(
 
 # %% EXTRAPOLATION TABLE
 # One row per estimate: a quantity, times our cost per unit of it, times an assumed
-# density of it. A MICrONS density is the census count over the coverage (the census
-# share of that quantity in the volume) over the volume of the occupied cubes. The
-# bounding box holds empty space, and the site volume is for the whole dataset, so
-# neither is used.
-# - synapses: the census share of the synapses with a post root (measured).
-# - neurons: the census share of the neurons with a nucleus in the volume (measured,
-#   counting each neuron where its soma is).
-# - dendrite cable: not measured. Assumed equal to the synapse coverage, so the row
-#   equals the synapse row on the occupied cubes.
-neuron_nuclei = (
-    Tables["cell_info"]
-    .lazy()
-    .filter(pl.col("broad_type").is_in(["excitatory", "inhibitory"]))
-    .select(pl.len())
-    .collect()
-    .item()
-)
-coverage = {
-    "synapses": n_synapses / volume_synapses,
-    "neurons": len(cells) / neuron_nuclei,
-    "dendrite cable": n_synapses / volume_synapses,
-}
-census_counts = {
-    "synapses": ("census synapses", n_synapses),
-    "dendrite cable": ("census cable", total_m),
-    "neurons": ("census neurons", len(cells)),
-}
-microns_densities = [
-    (
-        quantity,
-        f"{label} / coverage / occupied cubes",
-        coverage[quantity],
-        count / coverage[quantity] / volumes_mm3["occupied cubes"],
-    )
-    for quantity, (label, count) in census_counts.items()
-] + [
-    # The local density of all synapses, away from the partly filled edge cubes.
-    (
-        "synapses",
-        "median of inner cubes",
-        coverage["synapses"],
-        inner["n_synapses"].median() / cube_mm3,
-    ),
-]
-for quantity, value in coverage.items():
-    print(f"coverage of {quantity}: {value:.3f}")
+# density of it.
 estimates = pl.DataFrame(
-    [("MICrONS", *row) for row in microns_densities]
-    + [(BOOK, q, assumed, None, value) for q, assumed, value in BOOK_DENSITIES],
-    schema=[
-        "density_source",
-        "quantity",
-        "assumed_density",
-        "coverage",
-        "density_per_mm3",
-    ],
+    [("MICrONS", "synapses", synapses_per_mm3)]
+    + [(BOOK, q, value) for q, value in BOOK_DENSITIES],
+    schema=["density_source", "quantity", "density_per_mm3"],
     orient="row",
 ).select(
     pl.col("quantity"),
     pl.col("quantity").replace_strict(QUANTITIES).alias("unit"),
-    pl.col("quantity").replace_strict(dollars_per_unit).alias("dollars_per_unit"),
-    "density_source",
-    "assumed_density",
-    "coverage",
+    pl.col("quantity")
+    .replace_strict({q: float(n) for q, n in units_run.items()})
+    .alias("units_run"),
+    pl.col("quantity").replace_strict(dollars_per_unit).alias("unit_cost"),
     "density_per_mm3",
+    "density_source",
 )
 # A target with no source is a placeholder, and its column says so.
 target_columns = {
     name if source else f"{name} (placeholder)": mm3 for name, mm3, source in TARGETS
 }
 table = estimates.with_columns(
-    (pl.col("dollars_per_unit") * pl.col("density_per_mm3") * mm3).alias(name)
+    (pl.col("unit_cost") * pl.col("density_per_mm3") * mm3).alias(name)
     for name, mm3 in target_columns.items()
 ).sort(pl.col("quantity").cast(pl.Enum(list(QUANTITIES))), "density_source")
 with pl.Config(tbl_rows=-1, tbl_cols=-1, tbl_width_chars=250, fmt_str_lengths=50):
-    print(table.drop("unit", "dollars_per_unit"))
+    print(table.drop("unit"))
 OUT_PATH.mkdir(parents=True, exist_ok=True)
 table.write_csv(OUT_PATH / "cost_extrapolation.csv")
 
@@ -311,11 +249,6 @@ glue(
     cost_imputed_cable_percent=100 * imputed_m / total_m,
     cost_volume_synapses_millions=volume_synapses / 1e6,
     format="{:.1f}",
-)
-glue(
-    SCRATCH,
-    cost_microns_occupied_mm3=volumes_mm3["occupied cubes"],
-    format="{:.2f}",
 )
 # The range of each target with a source, over every estimate.
 for name, _, source in TARGETS:

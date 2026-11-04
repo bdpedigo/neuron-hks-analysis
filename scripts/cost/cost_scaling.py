@@ -45,7 +45,6 @@ seconds = (
 )
 neurons = (
     post_cells(SCRATCH)
-    .filter(pl.col("post_total_known_synapses") > 0)
     .select(pl.col("pt_root_id").alias("root_id"), "post_total_synapses")
     .join(seconds, on="root_id", how="inner")
     .join(Tables["root_mesh_vertices"].collect(), on="root_id", how="inner")
