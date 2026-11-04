@@ -34,8 +34,9 @@ ABLATION_RUNS = {
     "full_res_vertex": "run-20261103-182555-93b1",
 }
 ABLATION_TABLES = ["vertex_domains", "domain_features"]
-# Arm tables read at once in the pull. Each reads one chunk of roots at a time.
-MAX_WORKERS = 4
+# Chunks of roots read at once in the pull of each arm. The largest root peaks at
+# 3.2 GiB, and the laptop link (about 2 MB/s from GCS) gives no gain from more.
+MAX_WORKERS = 2
 
 
 def ablation_log_path(datastack: str = DATASTACK) -> str:

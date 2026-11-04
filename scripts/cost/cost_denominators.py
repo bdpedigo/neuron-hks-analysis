@@ -7,15 +7,19 @@ Our side:
   its cell type (about 1% of the neurons).
 - Cost: the dollars per step-hour of the full-run cluster session, times the
   step-hours that wrote the census tables. Both come from the deployment log table.
-- The MICrONS synapse density: every synapse with a post root, counted in cubes of
-  `BIN_UM`. The density is the mean count of the inner cubes (all six face
-  neighbors hold a synapse), which leaves out the partly filled cubes at the edge.
+- The MICrONS densities: every synapse with a post root, counted in cubes of
+  `BIN_UM`. The tissue is the cubes that hold a synapse, with the enclosed empty
+  cubes filled in (`FILL_HOLES`). The inner cubes are the tissue cubes whose six
+  face neighbors are tissue too, or the tissue cubes further than `INNER_MARGIN_UM`
+  from an edge cube (`INNER_BY_DISTANCE`). Both leave out the partly filled cubes
+  at the edge. A density is the synapses or the neuron nuclei in the inner cubes
+  over their volume.
 
 The extrapolation is a table with one row per estimate: a quantity (synapses,
 dendrite cable or neurons), times our cost per unit of it, times an assumed density
-of it (from MICrONS for synapses, or from the literature). The columns are the
-target volumes. A target with no source is a placeholder: its column says so, and it
-is not glued.
+of it (from MICrONS for synapses and neurons, or from the literature). The columns
+are the target volumes. A target with no source is a placeholder: its column says
+so, and it is not glued.
 
 Scope: full run. Run it with `--scratch` until `post_aggregation` exists (see
 `analysis.census_inputs`). The synapse binning reads all 337M synapses in chunks of
@@ -27,7 +31,10 @@ post-root buckets.
 # %%
 import sys
 
+import numpy as np
 import polars as pl
+import pyvista as pv
+from scipy import ndimage
 
 from analysis import FIG_PATH, Tables
 from analysis.census_inputs import glue, post_cells
@@ -43,6 +50,16 @@ CABLE = "dendrite_cable_length_um"
 BIN_UM = 10
 # The synapse table is bucketed on the post root. Bin this many buckets at a time.
 BUCKETS_PER_CHUNK = 32
+# Fill the empty cubes that the tissue encloses (somata, vessels) before the inner
+# cubes are found. With False, the tissue is only the cubes that hold a synapse.
+FILL_HOLES = True
+# With True, the inner cubes are the tissue cubes further than `INNER_MARGIN_UM` from
+# an edge cube (a tissue cube with a face neighbor that is not tissue). With False,
+# they are the tissue cubes whose six face neighbors are tissue too.
+INNER_BY_DISTANCE = False
+INNER_MARGIN_UM = 30
+# Show the tissue cubes in an interactive 3D view, inner or not.
+SHOW_CUBES = False
 
 BOOK = "Braitenberg & Schüz 1998"
 # The quantities that the cost is extrapolated by, and their units.
@@ -107,23 +124,80 @@ if not cubes_stash.exists():
     cubes_stash.save(bin_synapses())
 cubes = cubes_stash.load()
 
-occupied = set(zip(*(cubes[axis].to_list() for axis in "xyz")))
-faces = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
-cubes = cubes.with_columns(
-    inner=pl.Series(
-        [
-            all((x + dx, y + dy, z + dz) in occupied for dx, dy, dz in faces)
-            for x, y, z in zip(*(cubes[axis].to_list() for axis in "xyz"))
-        ]
+# %% INNER CUBES
+# A grid over the bounding box of the cubes, with the synapse count of each cube.
+origin = np.array([cubes[axis].min() for axis in "xyz"])
+shape = tuple(cubes[axis].max() - o + 1 for axis, o in zip("xyz", origin))
+counts = np.zeros(shape, dtype=np.int64)
+counts[tuple(cubes[axis].to_numpy() - o for axis, o in zip("xyz", origin))] = cubes[
+    "n_synapses"
+].to_numpy()
+tissue = counts > 0
+n_occupied = tissue.sum()
+if FILL_HOLES:
+    tissue = ndimage.binary_fill_holes(tissue)
+# The inner cubes: tissue cubes whose six face neighbors are tissue too.
+inner = ndimage.binary_erosion(tissue, ndimage.generate_binary_structure(3, 1))
+if INNER_BY_DISTANCE:
+    # The distance in µm from each cube center to the nearest edge cube center.
+    edge = tissue & ~inner
+    inner = tissue & (
+        ndimage.distance_transform_edt(~edge, sampling=BIN_UM) > INNER_MARGIN_UM
     )
-)
 cube_mm3 = (BIN_UM / 1000) ** 3
-inner = cubes.filter("inner")
+inner_mm3 = inner.sum() * cube_mm3
 volume_synapses = cubes["n_synapses"].sum()
-# The local density of all synapses, away from the partly filled edge cubes.
-synapses_per_mm3 = inner["n_synapses"].mean() / cube_mm3
 print(f"{volume_synapses / 1e6:.1f} million synapses with a post root")
-print(f"{inner.height:,} inner cubes, mean density {synapses_per_mm3:.3g} per mm³")
+print(
+    f"{n_occupied:,} occupied cubes, {tissue.sum() - n_occupied:,} filled, "
+    f"{inner.sum():,} inner ({inner_mm3:.3f} mm³)"
+)
+
+# %% CUBE VIEW
+# The tissue cubes in µm, colored by inner or not. Drag the plane to see inside.
+if SHOW_CUBES:
+    grid = pv.ImageData(
+        dimensions=np.array(shape) + 1, spacing=(BIN_UM,) * 3, origin=origin * BIN_UM
+    )
+    # VTK orders the cells with x fastest.
+    grid.cell_data["tissue"] = tissue.ravel(order="F").astype(np.uint8)
+    grid.cell_data["inner"] = inner.ravel(order="F").astype(np.uint8)
+    plotter = pv.Plotter()
+    plotter.add_mesh_clip_plane(
+        grid.threshold(0.5, scalars="tissue"),
+        scalars="inner",
+        crinkle=True,
+        normal="-z",
+        cmap=["tomato", "lightgray"],
+        show_scalar_bar=False,
+    )
+    plotter.add_legend([("edge", "tomato"), ("inner", "lightgray")])
+    plotter.show_axes()
+    plotter.show()
+
+# The neuron nuclei, in the cube that holds each one. The positions are in nm.
+nuclei = (
+    Tables["cell_info"]
+    .lazy()
+    .filter(pl.col("broad_type").is_in(["excitatory", "inhibitory"]))
+    .select(
+        (pl.col(f"pt_position_{axis}") / 1000 // BIN_UM).cast(pl.Int64)
+        for axis in "xyz"
+    )
+    .collect()
+    .to_numpy()
+    - origin
+)
+nuclei = nuclei[((nuclei >= 0) & (nuclei < shape)).all(axis=1)]
+inner_nuclei = inner[tuple(nuclei.T)].sum()
+
+# The local densities, away from the partly filled edge cubes.
+synapses_per_mm3 = counts[inner].sum() / inner_mm3
+neurons_per_mm3 = inner_nuclei / inner_mm3
+print(f"{synapses_per_mm3:.3g} synapses per mm³ in the inner cubes")
+print(
+    f"{inner_nuclei:,} neuron nuclei in the inner cubes, {neurons_per_mm3:.3g} per mm³"
+)
 
 # %% DENDRITE CABLE
 cells = post_cells(SCRATCH)
@@ -161,17 +235,19 @@ written = (
     .join(cells.select(pl.col("pt_root_id").alias("root_id")), on="root_id", how="semi")
 )
 
-session_hours = runs["elapsed_s"].sum() / 3600
-dollars_per_hour = dollars_per_step_hour()
-census_hours = written["elapsed_s"].sum() / 3600
-census_dollars = census_hours * dollars_per_hour
-print(f"session {session_hours:,.0f} step-hours, ${dollars_per_hour:.4f} per step-hour")
+session_step_hours = runs["elapsed_s"].sum() / 3600
+step_hour_dollars = dollars_per_step_hour()
+census_step_hours = written["elapsed_s"].sum() / 3600
+census_dollars = census_step_hours * step_hour_dollars
+print(
+    f"session {session_step_hours:,.0f} step-hours, ${step_hour_dollars:.4f} per step-hour"
+)
 print(
     written.group_by("step")
     .agg((pl.col("elapsed_s").sum() / 3600).round(0).alias("hours"))
     .sort("hours", descending=True)
 )
-print(f"census {census_hours:,.0f} step-hours, ${census_dollars:,.0f}")
+print(f"census {census_step_hours:,.0f} step-hours, ${census_dollars:,.0f}")
 
 # A check on scaling by synapses: the smaller pieces cost more per synapse, because
 # each root has a fixed cost (the mesh fetch and the writes).
@@ -203,7 +279,7 @@ print(
 # One row per estimate: a quantity, times our cost per unit of it, times an assumed
 # density of it.
 estimates = pl.DataFrame(
-    [("MICrONS", "synapses", synapses_per_mm3)]
+    [("MICrONS", "synapses", synapses_per_mm3), ("MICrONS", "neurons", neurons_per_mm3)]
     + [(BOOK, q, value) for q, value in BOOK_DENSITIES],
     schema=["density_source", "quantity", "density_per_mm3"],
     orient="row",
@@ -250,7 +326,13 @@ glue(
     cost_volume_synapses_millions=volume_synapses / 1e6,
     format="{:.1f}",
 )
-# The range of each target with a source, over every estimate.
+# The best estimate: our cost per synapse times the MICrONS synapse density.
+best = table.row(
+    by_predicate=(pl.col("quantity") == "synapses")
+    & (pl.col("density_source") == "MICrONS"),
+    named=True,
+)
+# The best estimate of each target with a source, and the range over every estimate.
 for name, _, source in TARGETS:
     if source is None:
         continue
@@ -258,6 +340,7 @@ for name, _, source in TARGETS:
     glue(
         SCRATCH,
         **{
+            f"cost_{key}_dollars_best": best[name],
             f"cost_{key}_dollars_low": table[name].min(),
             f"cost_{key}_dollars_high": table[name].max(),
         },

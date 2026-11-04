@@ -36,3 +36,7 @@ figures/census/spine_synapse_area_corr_by_multi.png
 # Supplement: the model panels
 figures/validation/validation_confusion_matrices.png
 figures/model_training/hks_synapse_learning_curve.png
+
+# Supplement: the compute cost panels
+figures/cost/time_vs_mesh_vertices_and_synapses.png
+figures/cost/time_share_by_part.png

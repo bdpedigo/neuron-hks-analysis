@@ -1,20 +1,3 @@
-"""Draft Fig 2B-E: the ablation arms of condensed_spectral against the proposed
-pipeline (ssa-backlog TASK-20, TASK-77), on the 40 cells of the ablation runs.
-
-- Time, memory and storage per root: `ablation_runs`, from the run log. Each root
-  had its own physical core, so its wall time is its compute time.
-- Mesh size: `root_mesh_vertices`, from the deployment log.
-- Accuracy: per arm, a random forest with the v3 settings on
-  `ablation_labeled_features`, scored as in the original Fig 2D. That is 10 random
-  80/20 splits by root, each scored by the accuracy pooled over its test labels,
-  and a Wilcoxon signed-rank test of each arm against proposed, paired by split.
-  The mean of the per-cell accuracies under leave-one-cell-out is a side table.
-
-Every arm has the same roots, so the arms share their splits.
-
-    uv run python scripts/ablation/compare_arms.py
-"""
-
 # %%
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,6 +19,7 @@ N_SPLITS = 10
 SPEC = MODEL_SPECS["ssa_model_full"]
 
 set_matplotlib_theme()
+pd.set_option("display.width", 200)
 
 # %% TIME, MEMORY AND STORAGE PER ROOT
 runs = (
