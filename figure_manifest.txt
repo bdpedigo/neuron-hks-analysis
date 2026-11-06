@@ -11,6 +11,9 @@
 # NOTE: figures/stat_summaries/ holds April 2026 files with some of these basenames.
 # figures/census/ is the current source. Do not repoint these at stat_summaries.
 
+# Figure 2
+figures/composites/show_pipeline_figure.png
+
 # Figure 3
 figures/composites/cell-gallery.png
 

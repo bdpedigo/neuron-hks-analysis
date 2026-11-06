@@ -9,9 +9,16 @@ It reads only figure files, so run the two panel scripts first.
     uv run python scripts/composites/h01_validation_figure.py
 """
 
-from panel_mosaic import PanelMosaic
+import os
 
-from analysis import FIG_PATH, capped_dpi
+# NOTE: cairosvg needs the Homebrew cairo library, as in the meshrep composites.
+os.environ["DYLD_LIBRARY_PATH"] = "/opt/homebrew/opt/cairo/lib:" + os.environ.get(
+    "DYLD_LIBRARY_PATH", ""
+)
+
+from panel_mosaic import PanelMosaic  # noqa: E402
+
+from analysis import FIG_PATH, capped_dpi  # noqa: E402
 
 H01_PATH = FIG_PATH / "h01_validation"
 ROOT_ID = 864691132388416057

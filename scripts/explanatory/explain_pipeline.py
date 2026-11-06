@@ -246,7 +246,8 @@ save_pyvista_figure(
 )
 # %%
 select_evals = [5, 31, -50]
-# select_evals = [5, 31, -1400]
+# select_evals=[3,30,301]
+# select_evals = [5, 70, 700]
 n_evals = len(select_evals)
 window_size = np.floor(np.array((8.04, 5.83)) * 100).astype(int)
 plotter = pv.Plotter(shape=(n_evals, 1), window_size=window_size, border_color="white")
@@ -266,7 +267,13 @@ for i, k in enumerate(select_evals):
         cmap="coolwarm",
         clim=[-clim, clim],
     )
-    # plotter.add_text(f"Eigenvector {k}", font_file=font_file, font_size=font_size)
+    # plotter.add_text(
+    #     f"Eigenvector {k % evecs.shape[1]}",
+    #     font_file=str(font_file),
+    #     font_size=font_size,
+    #     position="upper_left",
+    #     color="black",
+    # )
 
 
 plotter.link_views()
@@ -582,13 +589,13 @@ plotter.link_views()
 plotter.camera_position = cpos
 plotter.show(jupyter_backend="static")
 
-save_pyvista_figure(
-    plotter,
-    filename="mesh_simplification",
-    out_path=figure_out_path,
-    formats=["svg", "png"],
-    scale=5,
-)
+# save_pyvista_figure(
+#     plotter,
+#     filename="mesh_simplification",
+#     out_path=figure_out_path,
+#     formats=["svg", "png"],
+#     scale=5,
+# )
 
 # %%
 
