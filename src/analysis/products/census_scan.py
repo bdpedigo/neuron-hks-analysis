@@ -39,14 +39,23 @@ CLOUD_COLUMNS = {
     "synapse_mapping": ["synapse_id", "mesh_index"],
     "synapse_predictions": ["synapse_id", "pred_label", "posterior_max"],
     "vertex_structures": ["mesh_index", "structure_id"],
-    "structure_morphometry": ["structure_id", "size_nm3", "area_nm2", "n_synapses"],
+    "structure_morphometry": [
+        "structure_id",
+        "size_nm3",
+        "area_nm2",
+        "n_synapses",
+        "rep_x",
+        "rep_y",
+        "rep_z",
+    ],
     "structure_predictions": ["structure_id", "posterior_unitary", "pred_label"],
 }
 UNITARY_LABELS = ["unitary", "not_unitary"]
 
 # NOTE: bump WRITE_OPTIONS_VERSION when SORT or ENCODINGS change, so the cache key
 # moves.
-WRITE_OPTIONS_VERSION = 1
+# 2: the spines gained `rep_x/y/z`.
+WRITE_OPTIONS_VERSION = 2
 COMPRESSION_LEVEL = 9
 SORT = {
     SYNAPSES: ["post_pt_root_id", "synapse_id"],
@@ -74,6 +83,9 @@ ENCODINGS = {
         "structure_id": "DELTA_BINARY_PACKED",
         "size_nm3": "BYTE_STREAM_SPLIT",
         "area_nm2": "BYTE_STREAM_SPLIT",
+        "rep_x": "BYTE_STREAM_SPLIT",
+        "rep_y": "BYTE_STREAM_SPLIT",
+        "rep_z": "BYTE_STREAM_SPLIT",
         "n_synapses": "dictionary",
         "n_pre_root_ids": "dictionary",
         "posterior_unitary": "dictionary",
@@ -213,6 +225,7 @@ def join_chunk(
             pl.col("root_id").alias("post_pt_root_id"),
             pl.col("structure_id").cast(pl.Int32),
             pl.col("size_nm3", "area_nm2").cast(pl.Float32),
+            pl.col("rep_x", "rep_y", "rep_z").cast(pl.Float32),
             "n_synapses",
             "n_pre_root_ids",
             pl.col("posterior_unitary").cast(pl.Float32),
@@ -403,7 +416,8 @@ Tables.register(
     description=(
         "One row per spine structure of `structure_morphometry` at the `census` "
         "cutoff, with or without a synapse, keyed by (`post_pt_root_id`, "
-        "`structure_id`): `size_nm3`, `area_nm2`, `n_synapses` and `n_pre_root_ids` "
+        "`structure_id`): `size_nm3`, `area_nm2`, the representative point "
+        "`rep_x/y/z` in nm, `n_synapses` and `n_pre_root_ids` "
         "(from `microns_synapses`, no autapses, 0 with no synapse), "
         "`posterior_unitary`, `unitary_pred_label` (a string on disk) and "
         "`is_multi`. No census table reads the other morphometry or the spectral "

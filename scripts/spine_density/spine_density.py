@@ -42,7 +42,7 @@ spine_table = (
     Tables["column_spines"]
     .lazy()
     .select(
-        "root_id",
+        pl.col("post_pt_root_id").alias("root_id"),
         "structure_id",
         "rep_x",
         "rep_y",

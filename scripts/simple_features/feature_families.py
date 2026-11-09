@@ -114,6 +114,7 @@ def group_bootstrap(correct: np.ndarray, baseline: np.ndarray, groups: np.ndarra
 # %%
 results = {}
 fold_accuracy = {}
+fold_weighted_f1 = {}
 truth = pl.DataFrame({"label_key": synapses.index.to_numpy(), "tag": y.to_numpy()})
 for name, spec in ARMS.items():
     X = training_x(spec)
@@ -140,12 +141,11 @@ for name, spec in ARMS.items():
         .set_index("label_key")
         .loc[synapses.index, [str(s) for s in SEEDS]]
     )
-    # the accuracy on each held-out fold, per seed
-    fold_accuracy[name] = (
-        oof.join(truth, on="label_key")
-        .group_by("seed", "fold")
-        .agg(accuracy=(pl.col("pred") == pl.col("tag")).mean())["accuracy"]
-        .to_numpy()
+    # the accuracy and weighted F1 on each held-out fold, per seed
+    per_fold = oof.join(truth, on="label_key").partition_by("seed", "fold")
+    fold_accuracy[name] = np.array([(fold["pred"] == fold["tag"]).mean() for fold in per_fold])
+    fold_weighted_f1[name] = np.array(
+        [f1_score(fold["tag"], fold["pred"], average="weighted") for fold in per_fold]
     )
 
 # %%
@@ -153,7 +153,11 @@ y_true = y.to_numpy()
 
 
 def scores(pred: np.ndarray) -> dict:
-    row = dict(accuracy=(pred == y_true).mean(), macro_f1=f1_score(y_true, pred, average="macro"))
+    row = dict(
+        accuracy=(pred == y_true).mean(),
+        macro_f1=f1_score(y_true, pred, average="macro"),
+        weighted_f1=f1_score(y_true, pred, average="weighted"),
+    )
     for c in LABELS:
         row[f"{c}_recall"] = (pred[y_true == c] == c).mean()
     for c in ["spine", "shaft"]:
@@ -180,7 +184,7 @@ for name, preds in results.items():
     row.update(accuracy_lo95=lo, accuracy_hi95=hi)
     rows.append(row)
 summary = pd.DataFrame(rows).set_index("arm")
-metrics = ["accuracy", "macro_f1", "spine_recall", "shaft_recall", "soma_recall", "bdp_spine_recall", "bdp_shaft_recall"]
+metrics = ["accuracy", "macro_f1", "weighted_f1", "spine_recall", "shaft_recall", "soma_recall", "bdp_spine_recall", "bdp_shaft_recall"]
 with pd.option_context("display.width", 250, "display.max_columns", 30):
     print((100 * summary[metrics]).round(2).assign(n_columns=summary["n_columns"]))
     print((100 * summary[[f"{m}_range" for m in metrics]]).round(2))
@@ -199,3 +203,16 @@ ax.hlines(summary["accuracy"], xx - 0.25, xx + 0.25, color="black", linewidth=2)
 ax.set(ylabel="CV accuracy\n(held out cells)")
 ax.set_xticks(xx, summary.index.map(ARM_LABELS), rotation=45, ha="right")
 save_matplotlib_figure(fig, "feature_families_accuracy", subfolder=SUBFOLDER, pad_inches=0.1)
+
+# %%
+# The same figure with the weighted F1 score in place of the accuracy, and the
+# line at the mean of the per-fold scores.
+fig, ax = plt.subplots(figsize=(5, 5), layout="constrained")
+rng = np.random.default_rng(0)
+for x, name in zip(xx, summary.index):
+    f1 = fold_weighted_f1[name]
+    ax.scatter(x + rng.uniform(-0.15, 0.15, len(f1)), f1, s=10, color="gray", alpha=0.6, zorder=0)
+ax.hlines([fold_weighted_f1[name].mean() for name in summary.index], xx - 0.25, xx + 0.25, color="black", linewidth=2)
+ax.set(ylabel="Weighted F1 score\n(held-out cells)")
+ax.set_xticks(xx, summary.index.map(ARM_LABELS), rotation=45, ha="right")
+save_matplotlib_figure(fig, "feature_families_weighted_f1", subfolder=SUBFOLDER, pad_inches=0.1)

@@ -253,7 +253,8 @@ Tables.register(
     description=(
         "The rows of `spine_census_features` on the column cells: one row per spine "
         "structure, with or without a synapse, keyed by (`post_pt_root_id`, "
-        "`structure_id`). It holds `size_nm3`, `area_nm2`, the synapse and "
+        "`structure_id`). It holds `size_nm3`, `area_nm2`, the representative "
+        "point `rep_x/y/z` in nm, the synapse and "
         "presynaptic root counts (no autapses), `posterior_unitary`, "
         "`unitary_pred_label` and `is_multi`, at the `census` cutoff. It replaces "
         "the old `filtered_spine_info`."

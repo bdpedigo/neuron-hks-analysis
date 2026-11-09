@@ -77,4 +77,4 @@ for side in ["top", "right", "left"]:
     ax.spines[side].set_visible(False)
 ax.tick_params(axis="y", length=0)
 
-save_matplotlib_figure(fig, "spines_per_publication", subfolder="publication_scale")
+save_matplotlib_figure(fig, "spines_per_publication", subfolder="publication_scale", dpi=300)

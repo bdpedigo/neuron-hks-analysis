@@ -43,3 +43,9 @@ figures/model_training/hks_synapse_learning_curve.png
 # Supplement: the compute cost panels
 figures/cost/time_vs_mesh_vertices_and_synapses.png
 figures/cost/time_share_by_part.png
+
+# Supplement: the feature ablation
+figures/simple_features/feature_families_weighted_f1.png
+
+# Supplement: the spines shown in the publication of each compared method
+figures/publication_scale/spines_per_publication.png

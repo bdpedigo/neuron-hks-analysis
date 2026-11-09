@@ -178,8 +178,9 @@ for x, xlabel, suffix, _ in UNITS.values():
     save_matplotlib_figure(fig, f"multi_synapse_size_vs_spine_volume{suffix}", out_path)
 
 # %% S8: SYNAPSE SIZE AND SPINE VOLUME, SINGLE- AND MULTI-INPUT SPINES
-# The background is the putative single-input spines (by the unitary classifier) of
-# the proofread cells, from proofread excitatory axons.
+# The background is the putative single-input spines of the proofread cells, from
+# proofread excitatory axons: one presynaptic root, on a structure that the unitary
+# classifier calls one spine.
 proofread_ids = (
     Tables["cell_selection"]
     .lazy()
@@ -198,7 +199,8 @@ single = (
         pl.col("pre_broad_type") == "excitatory",
         pl.col("tag") == "spine",
         pl.col("spine_size_nm3").is_not_null(),
-        ~pl.col("spine_is_multi"),
+        pl.col("spine_n_pre_root_ids") == 1,
+        pl.col("spine_unitary_pred_label") == "unitary",
     )
     .select("size", y)
     .collect()
@@ -207,30 +209,49 @@ single = (
 single["size_nm3"] = synapse_size_nm3(single["size"])
 print(f"{len(single):,} putative single-input spine synapses")
 
+# The correlation on the log-log axes of the plot. The nm³ conversion is a constant
+# factor, so it does not change the log-log r. The p value underflows to 0, so it is not
+# glued.
+pearson_r, _ = pearsonr(np.log(single["size"]), np.log(single[y]))
+print(f"single: n={len(single):,}, r={pearson_r:.2f}")
+save_variables(
+    prefix="column_summary_",
+    format="{:.2f}",
+    single_synapse_excitatory_pearson_r=pearson_r,
+)
+save_variables(
+    prefix="column_summary_",
+    format="{:,}",
+    single_synapse_excitatory_n=len(single),
+)
+
+# The legend gives the log-log Pearson r of each set, the same r as the glued variables.
+# Its box is semi-transparent, so the few points under it still show.
 for x, xlabel, suffix, scale in UNITS.values():
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-    sns.scatterplot(
-        data=single,
-        x=x,
-        y=y,
-        s=2,
-        alpha=0.7,
-        ax=ax,
-        linewidth=0,
-        label="Putative single-input",
-        color="dimgrey",
-    )
-    sns.scatterplot(
-        data=ei_synapses.query("pre_broad_type == 'excitatory'"),
-        x=x,
-        y=y,
-        s=10,
-        alpha=1,
-        ax=ax,
-        linewidth=0.2,
-        label="Verified multi-input",
-        color="firebrick",
-    )
+    for data, s, alpha, linewidth, label, color in [
+        (single, 2, 0.7, 0, "Putative single-input", "dimgrey"),
+        (
+            ei_synapses.query("pre_broad_type == 'excitatory'"),
+            10,
+            1,
+            0.2,
+            "Verified multi-input",
+            "firebrick",
+        ),
+    ]:
+        pearson_r, _ = pearsonr(np.log(data[x]), np.log(data[y]))
+        sns.scatterplot(
+            data=data,
+            x=x,
+            y=y,
+            s=s,
+            alpha=alpha,
+            ax=ax,
+            linewidth=linewidth,
+            label=f"{label} ($r$={pearson_r:.2f})",
+            color=color,
+        )
     ax.set(
         xscale="log",
         yscale="log",
@@ -238,5 +259,14 @@ for x, xlabel, suffix, scale in UNITS.values():
         xlim=(0.15e3 * scale, 1e5 * scale),
     )
     ax.set(xlabel=f"Excitatory {xlabel}", ylabel="Spine volume (nm³)")
-    ax.legend(markerscale=2)
-    save_matplotlib_figure(fig, f"spine_synapse_area_corr_by_multi{suffix}", out_path)
+    ax.legend(
+        markerscale=2,
+        loc="upper left",
+        bbox_to_anchor=(0.01, 1.03),
+        handlelength=1,
+        handletextpad=0.4,
+        framealpha=0.7,
+    )
+    save_matplotlib_figure(
+        fig, f"spine_synapse_area_corr_by_multi{suffix}", out_path, pad_inches=0.1
+    )

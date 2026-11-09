@@ -47,16 +47,17 @@ print(counts.filter(pl.col("root_id") == root_id))
 spines = (
     Tables["column_spines"]
     .lazy()
-    .filter(pl.col("root_id") == root_id)
-    .select("root_id", "structure_id", "rep_x", "rep_y", "rep_z", "size_nm3", "max_dt_nm")
+    .filter(pl.col("post_pt_root_id") == root_id)
+    .select(
+        pl.col("post_pt_root_id").alias("root_id"), "structure_id", "rep_x", "rep_y", "rep_z", "size_nm3"
+    )
     .collect()
     .join(on_dendrite.select("root_id", "structure_id", "method"), on=["root_id", "structure_id"])
     .with_columns(
         description=pl.format(
-            "structure {}, {} µm³, max_dt {} nm",
+            "structure {}, {} µm³",
             "structure_id",
             (pl.col("size_nm3") / 1e9).round(4),
-            pl.col("max_dt_nm").round(0),
         )
     )
 )
