@@ -30,6 +30,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "skops>=0.15.0",
     "standard-transform>=2.0.0",
+    "statsmodels>=0.15.0",
     "toml>=0.10.2",
     "universal-pathlib>=0.3.10",
 ]

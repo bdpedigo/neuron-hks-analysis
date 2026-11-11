@@ -15,7 +15,14 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.class_weight import compute_sample_weight
 
-from analysis import FIG_PATH, Stash, Tables, save_matplotlib_figure, set_matplotlib_theme
+from analysis import (
+    FIG_PATH,
+    Stash,
+    Tables,
+    save_matplotlib_figure,
+    save_variables,
+    set_matplotlib_theme,
+)
 from analysis.models import MODEL_SPECS, RF_PARAMS, feature_columns, make_model
 from analysis.products.features import add_distance_to_nucleus
 
@@ -158,6 +165,33 @@ for arm in ARMS[1:]:
         result.pvalue,
     ]
 print(summary.round(4))
+
+# %% GLUED VALUES FOR THE PAPER
+labeled = (
+    Tables["ablation_labeled_features"]
+    .lazy()
+    .filter(pl.col("arm") == "proposed")
+    .select(n_neurons=pl.col("root_id").n_unique(), n_synapses=pl.len())
+    .collect()
+)
+ablation_means = paired[ARMS[1:]].mean()
+save_variables(
+    ablation_n_neurons=labeled["n_neurons"].item(),
+    ablation_n_synapses=labeled["n_synapses"].item(),
+    ablation_n_splits=N_SPLITS,
+    format="{:,}",
+)
+save_variables(
+    ablation_f1_proposed=paired["proposed"].mean(),
+    ablation_f1_min=ablation_means.min(),
+    ablation_f1_max=ablation_means.max(),
+    ablation_max_abs_f1_diff=summary.loc[ARMS[1:], "minus_proposed"].abs().max(),
+    format="{:.3f}",
+)
+save_variables(
+    ablation_min_wilcoxon_pvalue=summary.loc[ARMS[1:], "wilcoxon_pvalue"].min(),
+    format="{:.2f}",
+)
 
 # %% FIGURES
 palette = dict(zip(ARMS, sns.color_palette("Set2", len(ARMS))))
@@ -496,3 +530,15 @@ for arm in ARMS:
         result.pvalue,
     ]
 print(mlp_summary.round(4))
+
+# Over every arm, proposed included. In math mode, so a negative difference has a minus sign.
+save_variables(
+    mlp_f1_diff_min=mlp_summary["mlp_minus_forest"].min(),
+    mlp_f1_diff_max=mlp_summary["mlp_minus_forest"].max(),
+    format="${:.3f}$",
+)
+save_variables(
+    mlp_min_wilcoxon_pvalue=mlp_summary["wilcoxon_pvalue"].min(),
+    mlp_max_wilcoxon_pvalue=mlp_summary["wilcoxon_pvalue"].max(),
+    format="{:.3f}",
+)

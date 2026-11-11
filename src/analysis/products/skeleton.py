@@ -30,6 +30,9 @@ TIP_FILL_ROUNDS = 4
 
 # A local copy of the skeleton files that `cached_skeleton` reads.
 SKELETON_CACHE = DATA_PATH / "skeletons"
+# The L4 IT files of `scripts/skeleton/download_l4it.py`, in their own folder so that
+# they can be deleted in one step. `cached_skeleton` reads from here first.
+L4IT_SKELETON_CACHE = DATA_PATH / "skeletons_l4it"
 
 
 def _check_version(cell: osy.Cell, root_id: int) -> osy.Cell:
@@ -47,7 +50,11 @@ def load_skeleton(root_id: int) -> osy.Cell:
 
 def cached_skeleton(root_id: int) -> osy.Cell:
     """The skeleton of `root_id`, from a local copy of the file in `SKELETON_PATH`.
-    The first call copies the file to `SKELETON_CACHE`."""
+    The first call copies the file to `SKELETON_CACHE`, unless it is in
+    `L4IT_SKELETON_CACHE`."""
+    path = L4IT_SKELETON_CACHE / f"{root_id}.osy"
+    if path.exists():
+        return _check_version(osy.load_cell(str(path)), root_id)
     path = SKELETON_CACHE / f"{root_id}.osy"
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
